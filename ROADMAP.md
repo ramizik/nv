@@ -116,22 +116,29 @@ System Health / Model Status. (Plus the Estimated Deal Value money-shot.)
 - [x] **Verified**: `/api/simulate` → HOT 92/0.91, actions, notification, system status
 - [x] Core docs: README, ARCHITECTURE, DEMO_SCRIPT, integration-plan, setup-windows/remote, judging-story
 
-### Phase / Layer 2 — Dashboard 🔜 NEXT (target 14:40–15:40)
-**Milestone M2: judge can watch the full decision on screen, end-to-end, fully mocked.**
-- [ ] Vite + React + TS scaffold + dark operator theme
-- [ ] `lib/api.ts` client + `types/` mirroring the schema + bundled JSON fixture fallback
-- [ ] **"Simulate Inbound Call"** button → `POST /api/simulate` → populate state
-- [ ] 9 panels wired to `LeadAnalysis` fields (see `docs/integration-plan.md` mapping)
-- [ ] Hero: score badge (HOT/WARM/COLD) + **Estimated Deal Value** money-shot
-- [ ] Polish pass: spacing, color, transcript streaming feel, reason chips
+### Phase / Layer 2 — Dashboard ✅ DONE (14:40–15:15)
+**Milestone M2: judge can watch the full decision on screen, end-to-end, fully mocked.** ✅
+- [x] Vite + React + TS scaffold + dark operator theme
+- [x] `lib/api.ts` client + `types/` mirroring the schema + bundled JSON fixture fallback
+- [x] **"Simulate Inbound Call"** button → `POST /api/simulate` → populate state
+- [x] 9 panels wired to `LeadAnalysis` fields (see `docs/integration-plan.md` mapping)
+- [x] Hero: score badge (HOT/WARM/COLD, pulsing) + **Estimated Deal Value** money-shot
+- [x] Header health pills (API / infer / chat backend); fixture fallback if backend down
+- [x] **Verified**: typecheck clean, prod build green, dev server serves 200, live data path OK
+- [ ] (optional later) polish pass: transcript auto-scroll/stream feel, micro-animations
 
-### Phase / Layer 3 — Real integrations (target 15:40–16:40)
-**Milestone M3: live Discord alert fires; GB10 Nemotron produces the score.**
-- [ ] Discord: `CHAT_BACKEND=discord` + webhook → alert lands on a second screen
-- [ ] Nemotron on GB10: serve model (`inference/remote/`), set `INFERENCE_BACKEND=nemotron`,
-      verify JSON-out matches the contract; confirm System Health shows "GB10 @ Xms"
-- [ ] Confirm fail-safe: kill GB10 / webhook → still renders via mock
-- [ ] (stretch) PersonaPlex recorded/live voice → transcript
+### Phase / Layer 3 — Real integrations (target 15:30–16:40)
+**Milestone M3: GB10 Nemotron produces the score.** (Discord/Hermes owned by teammate — not ours.)
+- [x] Nemotron adapter hardened: overlay-on-mock-skeleton, `<think>`/fence/prose-tolerant JSON
+      parse, response_format retry, fail-fast connect (5s) + long read (60s), `_source` marker
+- [x] System Health reflects real state: online (GB10 @ Xms) / degraded (fallback) / mock
+- [x] `backend/test_nemotron.py` one-shot connectivity test
+- [x] Verified fail-safe locally: unreachable box → complete object, status `degraded`, ~5s
+- [ ] **BLOCKED on values:** `NEMOTRON_BASE_URL` + served model id from the GB10 box
+- [ ] Run `test_nemotron.py` against the box → confirm `_source: nemotron`
+- [ ] End-to-end: `INFERENCE_BACKEND=nemotron` → dashboard shows "GB10 Nemotron @ Xms"
+- [ ] (later) Integrate with existing Hermes: hand off LeadAnalysis instead of mock chat
+- [ ] (stretch) PersonaPlex recorded voice → transcript
 
 ### Phase / Layer 4 — Demo hardening (target 16:40–17:40)
 **Milestone M4: 3-minute run rehearsed and bulletproof.**

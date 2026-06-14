@@ -80,9 +80,15 @@ def run_analysis(
         actions.append({"type": "create_task", "label": "Created callback reminder: within 30 minutes", "status": "pending"})
     analysis["actions"] = actions
 
-    # system status
-    infer_status = "online" if config.INFERENCE_BACKEND == "nemotron" and "_warnings" not in analysis else "mock"
-    infer_detail = f"GB10 @ {infer_ms}ms" if infer_status == "online" else f"local heuristic @ {infer_ms}ms"
+    # system status — _source is set by the Nemotron adapter ('nemotron' | 'mock_fallback')
+    source = analysis.pop("_source", None)
+    used_gb10 = config.INFERENCE_BACKEND == "nemotron" and source == "nemotron"
+    if used_gb10:
+        infer_status, infer_detail = "online", f"GB10 Nemotron @ {infer_ms}ms"
+    elif config.INFERENCE_BACKEND == "nemotron":
+        infer_status, infer_detail = "degraded", f"GB10 unreachable — heuristic fallback @ {infer_ms}ms"
+    else:
+        infer_status, infer_detail = "mock", f"local heuristic @ {infer_ms}ms"
     analysis["system_status"] = [
         {"component": "PersonaPlex (voice)", "status": "mock", "detail": "transcript fixture"},
         {"component": "Nemotron (scoring)", "status": infer_status, "detail": infer_detail},
