@@ -1,0 +1,133 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://brightsmile.local/schemas/lead_analysis.schema.json",
+  "title": "LeadAnalysis",
+  "description": "Canonical object that flows through the entire system. Voice produces a transcript -> backend enriches into this -> dashboard renders it -> chat summarizes it. This is the single source of truth; every panel and adapter keys off these fields.",
+  "type": "object",
+  "required": ["lead_id", "received_at", "channel", "transcript", "extracted", "score", "clinic_context_hits", "actions", "next_best_action", "system_status"],
+  "properties": {
+    "lead_id": { "type": "string", "description": "Stable id for this lead interaction, e.g. lead_001" },
+    "received_at": { "type": "string", "description": "ISO8601 timestamp the lead came in" },
+    "channel": { "type": "string", "enum": ["voice", "voicemail", "web_form", "sms"], "description": "How the lead reached us" },
+    "after_hours": { "type": "boolean", "description": "True if outside clinic business hours (drives the 'we caught what staff missed' story)" },
+    "lead": {
+      "type": "object",
+      "description": "Caller identity facts, may be partial.",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" }
+      }
+    },
+    "summary": { "type": "string", "description": "One-paragraph operator-friendly summary. NOT chain-of-thought." },
+    "transcript": {
+      "type": "array",
+      "description": "Ordered conversation turns.",
+      "items": {
+        "type": "object",
+        "required": ["speaker", "text"],
+        "properties": {
+          "speaker": { "type": "string", "enum": ["lead", "agent"] },
+          "text": { "type": "string" },
+          "ts": { "type": "string", "description": "Optional relative timestamp like 00:12" }
+        }
+      }
+    },
+    "extracted": {
+      "type": "object",
+      "description": "Structured slots the agent pulled from the conversation. Drives the Extracted Intents/Entities panel.",
+      "properties": {
+        "service_interest": { "type": "array", "items": { "type": "string" }, "description": "e.g. ['veneers']" },
+        "timeline": { "type": "string", "description": "e.g. 'wedding in 6 weeks'" },
+        "deadline_weeks": { "type": ["number", "null"], "description": "Normalized weeks-to-deadline if expressible" },
+        "urgency": { "type": "string", "enum": ["low", "medium", "high"] },
+        "financing_interest": { "type": "boolean" },
+        "budget_signal": { "type": "string", "enum": ["unknown", "price_sensitive", "value_seeking", "premium"], "description": "Inferred budget posture" },
+        "insurance_mentioned": { "type": "boolean" },
+        "decision_stage": { "type": "string", "enum": ["researching", "comparing", "ready_to_book"] }
+      }
+    },
+    "score": {
+      "type": "object",
+      "required": ["label", "confidence"],
+      "description": "Lead qualification result. Drives the Qualification Score panel and the chat badge.",
+      "properties": {
+        "label": { "type": "string", "enum": ["hot", "warm", "cold"] },
+        "value": { "type": "number", "description": "0-100 numeric score" },
+        "confidence": { "type": "number", "description": "0.0-1.0 model confidence" },
+        "reason_tags": { "type": "array", "items": { "type": "string" }, "description": "Short operator-friendly justification chips, e.g. ['high-value-procedure','hard-deadline','financing-ready']" },
+        "urgency_reasoning": { "type": "string", "description": "One-sentence plain-English why, NOT raw CoT" }
+      }
+    },
+    "estimated_deal_value": {
+      "type": "object",
+      "description": "Revenue potential. The ROI money-shot on the dashboard.",
+      "properties": {
+        "currency": { "type": "string", "default": "USD" },
+        "low": { "type": "number" },
+        "high": { "type": "number" },
+        "basis": { "type": "string", "description": "e.g. 'Full veneer set 8-10 units @ $1,200-$2,000'" }
+      }
+    },
+    "clinic_context_hits": {
+      "type": "array",
+      "description": "Which clinic policy/context facts were consulted. Drives Company Context Retrieved panel.",
+      "items": {
+        "type": "object",
+        "required": ["label", "value"],
+        "properties": {
+          "label": { "type": "string", "description": "e.g. 'Financing'" },
+          "value": { "type": "string", "description": "e.g. 'CareCredit 0% for 18 months available'" },
+          "source": { "type": "string", "description": "Which context key it came from, e.g. 'financing_policy'" },
+          "matched": { "type": "boolean", "description": "Whether this favorably matched the lead's need" }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "description": "Agent action timeline. Each item is something the agent did or scheduled.",
+      "items": {
+        "type": "object",
+        "required": ["type", "label", "status"],
+        "properties": {
+          "type": { "type": "string", "enum": ["extract", "score", "context_check", "notify", "draft_followup", "create_task"] },
+          "label": { "type": "string", "description": "Human-readable, e.g. 'Posted hot-lead alert to #front-desk'" },
+          "status": { "type": "string", "enum": ["done", "pending", "failed"] },
+          "ts": { "type": "string", "description": "Relative or ISO timestamp" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "next_best_action": {
+      "type": "object",
+      "description": "Recommendation + ready-to-send draft. Drives Next Best Action panel.",
+      "properties": {
+        "recommendation": { "type": "string", "description": "e.g. 'Call back within 30 min; offer Saturday consult slot; lead with financing.'" },
+        "draft_followup": { "type": "string", "description": "Ready-to-send message draft in the clinic's preferred tone" },
+        "channel": { "type": "string", "enum": ["call", "sms", "email"] }
+      }
+    },
+    "notification": {
+      "type": "object",
+      "description": "The chat alert that was sent (or previewed). Drives Chat Notification Preview panel.",
+      "properties": {
+        "platform": { "type": "string", "enum": ["discord", "telegram", "slack", "mock"] },
+        "sent": { "type": "boolean" },
+        "preview_markdown": { "type": "string", "description": "Exact message body posted to chat" }
+      }
+    },
+    "system_status": {
+      "type": "array",
+      "description": "Per-component health. Drives System Health / Model Status panel.",
+      "items": {
+        "type": "object",
+        "required": ["component", "status"],
+        "properties": {
+          "component": { "type": "string", "description": "e.g. 'Nemotron (scoring)'" },
+          "status": { "type": "string", "enum": ["online", "mock", "degraded", "offline"] },
+          "detail": { "type": "string", "description": "e.g. 'GB10 @ 142ms' or 'mock fixture'" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "clinic_name": "BrightSmile Aesthetics",
+  "tagline": "Premium cosmetic & smile design dentistry",
+  "location": "Austin, TX",
+  "phone": "+1-512-555-0147",
+  "business_hours": {
+    "mon_fri": "08:00-17:00",
+    "sat": "09:00-13:00",
+    "sun": "closed",
+    "timezone": "America/Chicago"
+  },
+  "services": [
+    { "name": "Porcelain Veneers", "category": "cosmetic", "price_low": 1200, "price_high": 2000, "unit": "per tooth", "typical_units": "8-10", "lead_time_weeks": 3, "flagship": true },
+    { "name": "Teeth Whitening", "category": "cosmetic", "price_low": 350, "price_high": 650, "unit": "per session" },
+    { "name": "Invisalign", "category": "cosmetic", "price_low": 4000, "price_high": 6500, "unit": "full course" },
+    { "name": "Dental Implants", "category": "restorative", "price_low": 3000, "price_high": 5000, "unit": "per implant" },
+    { "name": "Smile Makeover (full)", "category": "cosmetic", "price_low": 12000, "price_high": 30000, "unit": "package", "flagship": true },
+    { "name": "Routine Cleaning", "category": "general", "price_low": 90, "price_high": 200, "unit": "per visit" }
+  ],
+  "financing_policy": {
+    "available": true,
+    "providers": ["CareCredit", "Cherry"],
+    "promo": "0% APR for 18 months on cosmetic treatment over $2,000",
+    "deposit_to_book": 250
+  },
+  "insurance_policy": {
+    "accepts_ppo": true,
+    "cosmetic_covered": false,
+    "note": "Cosmetic procedures (veneers, whitening) are elective and not covered by insurance. Implants may be partially covered when medically necessary."
+  },
+  "classification_rules": {
+    "elective_cosmetic": ["Porcelain Veneers", "Teeth Whitening", "Invisalign", "Smile Makeover (full)"],
+    "emergency": ["severe pain", "swelling", "trauma", "knocked-out tooth", "abscess"],
+    "note": "Emergencies route to on-call line; cosmetic leads route to lead-conversion flow."
+  },
+  "premium_lead_rules": {
+    "high_value_services": ["Porcelain Veneers", "Smile Makeover (full)", "Dental Implants", "Invisalign"],
+    "hot_signals": [
+      "hard deadline within 8 weeks (wedding, event, photoshoot)",
+      "interest in a flagship high-value service",
+      "asks about financing (intent to buy, not just price-checking)",
+      "ready_to_book decision stage"
+    ],
+    "warm_signals": ["high-value service but no deadline", "comparing providers", "price-sensitive but engaged"],
+    "cold_signals": ["routine/general service only", "no deadline and just researching", "out of service area"],
+    "escalation_policy": "Hot leads -> alert front-desk channel immediately + recommend callback within 30 minutes. Warm -> alert + next-business-day follow-up. Cold -> log only."
+  },
+  "followup_tone": {
+    "voice": "warm, concierge, confident, never pushy",
+    "guidelines": "Lead with empathy for their timeline, reassure on results, make booking effortless, mention financing only as a convenience not a discount.",
+    "signature": "— The BrightSmile Aesthetics Team"
+  },
+  "faq": [
+    { "q": "Can veneers be done before a wedding in 6 weeks?", "a": "Yes. Our veneer process typically takes 2-3 visits over ~3 weeks, so a 6-week runway is comfortable with a prompt consult." },
+    { "q": "Do you offer financing?", "a": "Yes — CareCredit and Cherry, with 0% APR for 18 months on cosmetic treatment over $2,000." },
+    { "q": "Is cosmetic work covered by insurance?", "a": "Cosmetic procedures are elective and generally not covered, but we make them affordable through financing." },
+    { "q": "How much do veneers cost?", "a": "$1,200–$2,000 per tooth; most smile transformations use 8–10 veneers." }
+  ]
+}

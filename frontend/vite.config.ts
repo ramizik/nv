@@ -1,0 +1,8 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+// Dashboard dev server on :5173. VITE_API_BASE points at the FastAPI backend (:8080).
+export default defineConfig({
+  plugins: [react()],
+  server: { port: 5173 },
+});

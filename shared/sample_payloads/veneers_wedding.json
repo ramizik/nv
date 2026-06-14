@@ -1,0 +1,18 @@
+{
+  "lead_id": "lead_001",
+  "received_at": "2026-06-13T21:42:00-05:00",
+  "channel": "voice",
+  "after_hours": true,
+  "lead": {
+    "name": "Jessica Moreno",
+    "phone": "+1-512-555-0822"
+  },
+  "transcript": [
+    { "speaker": "agent", "text": "Thank you for calling BrightSmile Aesthetics, this is Ava, our after-hours assistant. How can I help you tonight?", "ts": "00:00" },
+    { "speaker": "lead", "text": "Hi! I'm interested in veneers. I have a wedding coming up in about six weeks and I wanted to know if it's even possible in time, and whether you offer financing.", "ts": "00:06" },
+    { "speaker": "agent", "text": "Congratulations on the wedding! Veneers before then is absolutely doable — the process usually takes two to three visits over about three weeks. Are you thinking a full smile, around eight to ten teeth, or just the front few?", "ts": "00:15" },
+    { "speaker": "lead", "text": "Probably the top front ones, however many show when I smile. I want it to look really natural for the photos.", "ts": "00:27" },
+    { "speaker": "agent", "text": "Perfect, that's exactly what we specialize in. And on financing — we offer 0% APR for 18 months on cosmetic treatment, so you can spread it out. Would mornings or afternoons work better for a consult this week?", "ts": "00:36" },
+    { "speaker": "lead", "text": "Oh that's great. Afternoons are better for me. Honestly if it can be done in time I'm ready to book a consult.", "ts": "00:49" }
+  ]
+}
