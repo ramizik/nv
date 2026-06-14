@@ -141,8 +141,13 @@ _Scoring (ours — local Nemotron):_
 - [x] Decision: serve **Nemotron-Super** (on-brand, `detailed thinking off` toggle works as-is)
 - [x] System Health reflects real state: online (GB10 @ Xms) / degraded (fallback) / mock
 - [x] `backend/test_nemotron.py` one-shot connectivity test
-- [ ] **BLOCKED on values:** `NEMOTRON_BASE_URL` + served model id (Nemotron-Super served on `/v1`)
-- [ ] Run `test_nemotron.py` against the box → confirm `_source: nemotron`
+- [x] **RESOLVED (confirmed on the GB10 box):** a Nemotron model is already served locally via
+      **Ollama** (OpenAI-compatible) — `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1`,
+      `NEMOTRON_MODEL=lifeos-nemotron-120b:latest` (Nemotron-H MoE, 120B, 1M ctx, tools+thinking).
+      `lifeos-qwen3-30b:latest` is also up for the optional cheap-extraction path.
+      No API key needed (`NEMOTRON_API_KEY=not-needed`). ⚠️ Reality differs from the earlier
+      "serve Nemotron-Super via vLLM on :8000" plan — see decision in Phase 5 below.
+- [ ] Run `test_nemotron.py` against `:11434/v1` → confirm `_source: nemotron`
 - [ ] End-to-end: `INFERENCE_BACKEND=nemotron` → dashboard shows "GB10 Nemotron @ Xms"
 
 _Messaging (hand off to teammate's Hermes — `:8642`, owns Discord bot):_
@@ -150,10 +155,55 @@ _Messaging (hand off to teammate's Hermes — `:8642`, owns Discord bot):_
       bot + channel `1509734278206984194`, default model cloud Gemini (⇒ we keep reasoning local)
 - [x] `HermesChatAdapter` scaffolded (`CHAT_BACKEND=hermes`), fail-safe to preview
 - [x] Docs corrected: our backend = Lead Analyzer, NOT Hermes; `docs/hermes-integration.md` + ask doc
-- [ ] **BLOCKED on teammate:** `HERMES_API_KEY`; a deterministic Discord-send endpoint; co-locate
-      our backend on the GB10 (or tunnel `:8642`); confirm alert channel id
+- [x] **CONFIRMED on the GB10 box:** Hermes gateway is running, `GET /health` → 200
+      (`hermes-agent v0.16.0`), Discord platform = connected, bot owns channel
+      `1509734278206984194` (#general, guild "AGENT"). `API_SERVER_KEY` bearer is set in
+      `~/.hermes/.env`.
+- [ ] **GAP — the deterministic Discord-send endpoint does NOT exist in Hermes yet.** Today the
+      only verbatim-send path is the in-process `send_message_tool` / `DiscordAdapter.send()`
+      (Python, not HTTP). The HTTP API (`:8642`) is agent-chat only. ⇒ **we must add it** (Phase 5).
+- [ ] **BLOCKED on teammate:** get `HERMES_API_KEY` value; co-locate our backend on the GB10
+      (or tunnel `:8642`); confirm `1509734278206984194` is the staff-watched channel
 - [ ] End-to-end: `CHAT_BACKEND=hermes` → real alert appears in Discord #front-desk
 - [ ] (stretch) PersonaPlex recorded voice → transcript
+
+### Phase / Layer 5 — Integration execution on the GB10 box ⬅ NEXT MUST-DO
+**Milestone M5: live, deterministic end-to-end on one box — `/api/simulate` → real Nemotron
+score → verbatim Discord alert.** Ordered by dependency; each step is small and reversible.
+
+_Reasoning path (point at the model that's actually running):_
+- [ ] Set backend `.env`: `INFERENCE_BACKEND=nemotron`,
+      `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1`, `NEMOTRON_MODEL=lifeos-nemotron-120b:latest`,
+      `NEMOTRON_API_KEY=not-needed`.
+- [ ] **Decision (Nemotron serving):** keep the **already-running Ollama 120B** (zero setup,
+      reliable, tools+thinking) rather than standing up vLLM Nemotron-Super on `:8000`. Update
+      `inference/remote/*.sh` + README/ARCH wording from "vLLM :8000" to "Ollama :11434/v1" so
+      docs match reality. (vLLM remains a documented alternative, not the demo path.)
+- [ ] Run `backend/test_nemotron.py` against `:11434/v1`; confirm clean JSON + `_source: nemotron`.
+      The 120B may be slow on first token — sanity-check latency vs the 60s read timeout; if tight,
+      fall back to `lifeos-qwen3-30b:latest` for the demo.
+
+_Messaging path (build the deterministic seam — this is the one real piece of new code on the GB10/Hermes side):_
+- [ ] **Add `POST /discord/send` to Hermes** (gateway api_server): bearer-authed (`API_SERVER_KEY`),
+      body `{ "channel": "<id>", "content": "<verbatim markdown>" }` → calls `DiscordAdapter.send()`
+      directly (no LLM), returns `{ "sent": true, "message_id": "..." }`. ~30 lines wrapping the
+      existing in-process send. This is on the Hermes-owner side of the repo, not this one.
+- [ ] Swap `HermesChatAdapter.send()` to POST `/discord/send` instead of `/v1/chat/completions`
+      (verbatim, deterministic). Keep the chat-completions LLM-relay as the documented fallback.
+- [ ] Put the real `HERMES_API_KEY` in backend `.env` (never commit). Set
+      `CHAT_BACKEND=hermes`, `HERMES_BASE_URL=http://127.0.0.1:8642`,
+      `HERMES_DISCORD_CHANNEL=1509734278206984194`.
+
+_Co-location & wiring (Hermes binds 127.0.0.1, so the backend must live on this box):_
+- [ ] Run our FastAPI backend **on the GB10** so Nemotron (`:11434`) and Hermes (`:8642`) are both localhost.
+- [ ] ⚠️ **Port collision:** `:8080` is already taken on this box (a uvicorn is bound there).
+      Run our backend on a free port (e.g. `:8090`) and update `VITE_API_BASE` / `CORS_ORIGINS` to match.
+- [ ] End-to-end smoke: `curl -X POST http://127.0.0.1:8090/api/simulate` → HOT score from the
+      real model + the alert visibly lands in Discord, exactly as formatted.
+
+_Security (carry-over, do not skip):_
+- [ ] Rotate the GitHub PAT used to push this update (it was shared in plaintext).
+- [ ] Hermes owner: scrub + rotate the live Telegram token leaked in `~/.hermes/gateway_state.json`.
 
 ### Phase / Layer 4 — Demo hardening (target 16:40–17:40)
 **Milestone M4: 3-minute run rehearsed and bulletproof.**
