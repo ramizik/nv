@@ -93,12 +93,14 @@ Windows: `scripts/windows/*.ps1` + `docs/setup-windows.md`. GB10 wiring: `docs/s
 
 | Switch | Env vars |
 |--------|----------|
-| Real local inference on GB10 | `INFERENCE_BACKEND=nemotron` · `NEMOTRON_BASE_URL=http://<gb10>:8000/v1` · `NEMOTRON_MODEL=<id from /v1/models>` |
+| Real local inference on GB10 | `INFERENCE_BACKEND=nemotron` · `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1` · `NEMOTRON_MODEL=lifeos-nemotron-120b:latest` (Ollama, no key) |
 | Real staff alert via Hermes bot | `CHAT_BACKEND=hermes` · `HERMES_API_KEY=<Hermes API_SERVER_KEY>` (backend must run on the GB10 box or tunnel `:8642`) |
 | Raw Discord webhook (fallback) | `CHAT_BACKEND=discord` · `DISCORD_WEBHOOK_URL=...` |
 
-> Hermes (the teammate's service) owns Discord and binds `127.0.0.1:8642`. See
-> `docs/hermes-integration.md` for the seam, topology, and what the Hermes owner must expose.
+> **GB10 demo reality:** Nemotron-120B is served via **Ollama** on `:11434`; Hermes (teammate's
+> service, owns Discord) binds `127.0.0.1:8642`; **`:8080` is taken so run our backend on `:8090`**.
+> ⚠️ ~120 GB total ⇒ **only ONE local model resident at a time** — pre-warm exactly the demo
+> model. See `docs/hermes-integration.md` for the seam, topology, and the Hermes-owner checklist.
 
 ## API (full contract in `docs/integration-plan.md`)
 

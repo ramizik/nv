@@ -6,10 +6,14 @@ Everything about the reasoning layer and how to swap mock ↔ real local inferen
 - `local/mock_inference.py` — CLI to run the mock analysis on a transcript fixture (no server).
 - `local/sample_inputs/`, `local/sample_outputs/` — fixtures (golden veneers output lives here).
 - `remote/` — scripts to serve the real model on the **GB10 NVIDIA box**:
-  - `start_nemotron.sh` — serve Nemotron (vLLM) on :8000, OpenAI-compatible. **Set `MODEL`.**
+  - `start_nemotron.sh` — ensure/​warm the Nemotron model on **Ollama** (`:11434/v1`,
+    OpenAI-compatible) — the confirmed demo path. vLLM `:8000` documented as an alternative.
   - `run_model_server.sh` — stable entry point delegating to the above.
   - `start_personaplex.sh` — voice service placeholder (stretch).
   - `healthcheck.sh` — verify GPU + `/v1/models` + a tiny completion.
+
+> ⚠️ **~120 GB unified memory ⇒ only ONE local model resident at a time.** Keep exactly the
+> demo model (`lifeos-nemotron-120b:latest`) loaded; don't run voice/embed/Qwen concurrently.
 
 ## Mock vs real
 The backend picks the adapter from `.env`:

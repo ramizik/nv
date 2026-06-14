@@ -33,16 +33,20 @@ npm run dev          # http://localhost:5173
 Or: `.\scripts\windows\run_frontend.ps1`
 
 ## Pointing at the remote GB10 box (optional, for real inference)
-Edit `.env`:
+Nemotron-120B is served on the box via **Ollama** at `:11434` (no key). Edit `.env`:
 ```
 INFERENCE_BACKEND=nemotron
-NEMOTRON_BASE_URL=http://<gb10-host-or-ip>:8000/v1
+NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1
+NEMOTRON_MODEL=lifeos-nemotron-120b:latest
 ```
-The GB10 server is started on the Linux box — see `docs/setup-remote-nvidia.md`.
-Make sure the GB10 port is reachable from Windows (same LAN / SSH tunnel:
-`ssh -L 8000:localhost:8000 user@gb10-host`, then use `http://localhost:8000/v1`).
+Ollama binds localhost on the box, so from Windows you must tunnel:
+`ssh -L 11434:localhost:11434 user@<gb10-host>`, then use `http://127.0.0.1:11434/v1`.
+For the live demo we instead run the **backend on the GB10** (`:8090`) — see
+`docs/setup-remote-nvidia.md` and `docs/hermes-integration.md`.
 
 ## Discord alert (optional)
+The real path hands off to the teammate's Hermes bot (`CHAT_BACKEND=hermes`); the raw webhook
+below is a standalone fallback only. See `docs/hermes-integration.md`.
 ```
 CHAT_BACKEND=discord
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/....

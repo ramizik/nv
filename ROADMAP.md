@@ -222,6 +222,8 @@ _Security (carry-over, do not skip):_
 | Risk | Fallback |
 |------|----------|
 | GB10 model server flaky/slow | `INFERENCE_BACKEND=mock` — heuristic scores identically for the demo |
+| 120B cold/slow on first token | **Pre-warm** before the demo (`ollama run` once / `test_nemotron.py`); read timeout 90s |
+| ~120 GB ⇒ only ONE model resident | Load exactly the demo scoring model; voice/embed stay unloaded (voice = fixture). Switch to `lifeos-qwen3-30b:latest` only *before* the run, never mid-demo |
 | Discord webhook fails | Chat Notification Preview panel shows the alert anyway |
 | Live voice unreliable | Transcript fixture (default) — never put a mic on the critical path |
 | Frontend not done in time | Backend `/docs` (Swagger) + `curl /api/simulate` still tells the story |

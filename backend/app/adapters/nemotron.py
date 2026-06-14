@@ -10,8 +10,10 @@ model. Strategy chosen for hackathon reliability:
      estimated_deal_value or context hits, the dashboard still gets a full object.
   4. On ANY error, return the mock skeleton. The demo can never hard-fail.
 
-Enable with:  INFERENCE_BACKEND=nemotron  NEMOTRON_BASE_URL=http://<gb10-host>:8000/v1
-Nemotron reasoning toggle: we prepend "detailed thinking off" so output is clean JSON.
+Enable with:  INFERENCE_BACKEND=nemotron  NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1
+              NEMOTRON_MODEL=lifeos-nemotron-120b:latest   (Ollama on the GB10, no API key)
+Nemotron reasoning toggle: we prepend "detailed thinking off" so output is clean JSON. Even if
+the model still emits <think> blocks, _extract_json strips them — so this is robust either way.
 """
 import json
 import re
@@ -79,8 +81,9 @@ class NemotronInferenceAdapter(InferenceAdapter):
         url = f"{config.NEMOTRON_BASE_URL}/chat/completions"
 
         # Fail fast if the host is unreachable (5s connect), but allow a slow model to think
-        # (60s read). Without the short connect timeout a bad URL stalls the whole demo.
-        timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
+        # (NEMOTRON_TIMEOUT_READ, default 90s — the 120B can be slow on a cold first token).
+        # Without the short connect timeout a bad URL stalls the whole demo. PRE-WARM the model.
+        timeout = httpx.Timeout(connect=5.0, read=config.NEMOTRON_TIMEOUT_READ, write=10.0, pool=5.0)
 
         # Try with JSON mode first; some servers 400 on response_format -> retry without it.
         for payload in ({**base_payload, "response_format": {"type": "json_object"}}, base_payload):

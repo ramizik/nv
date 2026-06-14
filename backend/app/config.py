@@ -23,13 +23,18 @@ INFERENCE_BACKEND = os.getenv("INFERENCE_BACKEND", "mock").lower()
 # 'mock' | 'hermes' | 'discord'  — how the staff alert is delivered
 CHAT_BACKEND = os.getenv("CHAT_BACKEND", "mock").lower()
 
-# Local GB10 model server (vLLM/NIM serving Nemotron-Super) — used when
-# INFERENCE_BACKEND=nemotron. We call this DIRECTLY, NOT through Hermes: Hermes'
-# own default model is cloud Gemini, and routing reasoning through it would send
-# patient conversations off-box and break our "nothing leaves the building" claim.
-NEMOTRON_BASE_URL = os.getenv("NEMOTRON_BASE_URL", "http://localhost:8000/v1")
-NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nvidia/nemotron")
+# Local GB10 model server — used when INFERENCE_BACKEND=nemotron. CONFIRMED on the box:
+# a Nemotron-120B is served via **Ollama** (OpenAI-compatible) at :11434/v1, no API key.
+# We call this DIRECTLY, NOT through Hermes: Hermes' default model is cloud Gemini, and
+# routing reasoning through it would send patient conversations off-box and break the
+# "nothing leaves the building" claim. NOTE: ~120 GB unified memory ⇒ only ONE local
+# model resident at a time — keep exactly this model loaded for the demo (no voice/embed).
+NEMOTRON_BASE_URL = os.getenv("NEMOTRON_BASE_URL", "http://127.0.0.1:11434/v1")
+NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "lifeos-nemotron-120b:latest")
 NEMOTRON_API_KEY = os.getenv("NEMOTRON_API_KEY", "not-needed")
+# Read timeout (s) for a model call. The 120B can be slow on a cold first token, so allow
+# room — but PRE-WARM before the demo so it's resident. Connect stays fail-fast (see adapter).
+NEMOTRON_TIMEOUT_READ = float(os.getenv("NEMOTRON_TIMEOUT_READ", "90"))
 
 # Hermes — the teammate's RUNNING service on the GB10 box. OpenAI-compatible agent
 # gateway at :8642 that OWNS Discord (bot), memory, and tasks. We hand a finished

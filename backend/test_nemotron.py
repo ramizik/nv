@@ -3,9 +3,10 @@
 
     cd backend
     INFERENCE_BACKEND=nemotron \
-    NEMOTRON_BASE_URL=http://<gb10-host>:8000/v1 \
-    NEMOTRON_MODEL=<served-model-id> \
+    NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1 \
+    NEMOTRON_MODEL=lifeos-nemotron-120b:latest \
     ./.venv/bin/python test_nemotron.py
+    # (Ollama on the GB10, no API key. Pre-warm the 120B first or the first call is slow.)
 
 Prints whether the model actually answered ('nemotron') or we fell back ('mock_fallback'),
 plus the score it produced. Use this to confirm wiring before touching the demo.

@@ -67,9 +67,12 @@ fixture by default — live audio is never on the demo critical path.
 
 ## Dual-machine model
 - **Windows dev machine:** frontend + backend dev, all-mock demo.
-- **Remote NVIDIA (GB10) Linux box:** serves Nemotron via an OpenAI-compatible endpoint
-  (`inference/remote/`) **and** runs Hermes (`:8642`). For the live demo, run our backend
-  **on the GB10** so it reaches both the model server and Hermes over localhost. Backend
-  points at the model with `INFERENCE_BACKEND=nemotron` + `NEMOTRON_BASE_URL`, and at Hermes
-  with `CHAT_BACKEND=hermes` + `HERMES_API_KEY`. `shared/` is the cross-machine source of
-  truth, pulled on both.
+- **Remote NVIDIA (GB10) Linux box:** serves Nemotron-120B via **Ollama** (`:11434/v1`,
+  OpenAI-compatible, no key) **and** runs Hermes (`:8642`). For the live demo, run our backend
+  **on the GB10** so it reaches both over localhost. Backend points at the model with
+  `INFERENCE_BACKEND=nemotron` + `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1`, and at Hermes
+  with `CHAT_BACKEND=hermes` + `HERMES_API_KEY`. `shared/` is the cross-machine source of truth.
+- ⚠️ **`:8080` is taken on the box — run our backend on `:8090`** (`uvicorn app.main:app --port 8090`).
+- ⚠️ **Single-model residency:** ~120 GB unified memory holds only ONE local model at a time.
+  Hermes uses *cloud* Gemini so it doesn't compete for VRAM — but voice/embed models would.
+  Keep exactly the demo scoring model loaded; voice stays a fixture (never on the critical path).

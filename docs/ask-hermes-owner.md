@@ -11,18 +11,20 @@
   back to a preview-only panel.
 - I'll put it in my `.env` as `HERMES_API_KEY=` — I will **not** commit it.
 
-## 2. Expose a DETERMINISTIC Discord-send endpoint  ← the important one
+## 2. Expose a DETERMINISTIC Discord-send endpoint  ← the important one (confirmed missing)
 - **What:** a thin endpoint that posts a message verbatim via your bot, no LLM in the loop. Ideal:
   ```
   POST /discord/send
   { "channel": "1509734278206984194", "content": "<pre-formatted markdown>" }
   → 200 { "sent": true, "message_id": "..." }
   ```
-- **Why:** right now my only option is `/v1/chat/completions`, i.e. *asking the agent* to post a
-  fixed alert. That's non-deterministic (it may reword, summarize, or skip). For a live demo I
-  need the alert to post **exactly** as formatted, every time.
-- If you already have a tool/function that does this internally, just wrap it in one HTTP route
-  and tell me the path + payload shape. I'll point my `HermesChatAdapter` straight at it.
+- **Why:** I checked — this doesn't exist yet. The verbatim path is your in-process
+  `send_message_tool` / `DiscordAdapter.send()`; the HTTP API (`:8642`) is agent-chat only. My only
+  current option is *asking the agent* to post a fixed alert via `/v1/chat/completions`, which is
+  non-deterministic (it may reword, summarize, or skip). For a live demo the alert must post
+  **exactly** as formatted, every time.
+- **Lift:** ~30 lines — wrap the existing `DiscordAdapter.send()` in one bearer-authed route. Tell
+  me the path + payload shape and I'll point my `HermesChatAdapter` straight at it.
 
 ## 3. Confirm the alert channel
 - **What:** is `DISCORD_HOME_CHANNEL = 1509734278206984194` the channel staff will watch for
@@ -32,16 +34,17 @@
 ## 4. Make Hermes reachable from my backend
 - Hermes binds `127.0.0.1:8642`, so my backend can't reach it from another host as-is.
 - **Simplest:** let me run my backend **on the GB10 box** (repo's already pulled there) — then
-  it's all localhost, no bind change needed. Tell me a port I can use (I default to `:8080`).
-- **Or:** I SSH-tunnel `:8642` (and the model port). Either works — just tell me which you prefer.
+  it's all localhost, no bind change needed. I'll use **`:8090`** (since `:8080` is already taken).
+- **Or:** I SSH-tunnel `:8642` (and `:11434`). Either works — just tell me which you prefer.
 
-## 5. Serve Nemotron-Super for scoring (separate from Hermes)
-- **What:** serve **Nemotron-Super** on an OpenAI-compatible port (vLLM or NIM), and send me:
-  1. base URL, e.g. `http://127.0.0.1:8000/v1`
-  2. the exact model id from `GET /v1/models`
-  3. whether it needs an API key
-- **Why:** this is my **reasoning** path — I call it **directly**, not through Hermes (so patient
-  conversations stay on-box; Hermes' default model is cloud Gemini). It's independent of items 1–4.
+## 5. Nemotron scoring — already up, nothing to do ✅
+- **Confirmed:** Nemotron-120B is already served via **Ollama** at `http://127.0.0.1:11434/v1`
+  (`lifeos-nemotron-120b:latest`, no API key). I call it **directly**, not through Hermes (so
+  patient conversations stay on-box; Hermes' default model is cloud Gemini).
+- **Only ask:** ⚠️ ~120 GB total means **one model resident at a time** — please keep the 120B
+  loaded (pre-warmed) for the demo and don't spin up voice/embed/Qwen alongside it. If we decide
+  the 120B is too slow live, we'll switch the resident model to `lifeos-qwen3-30b:latest` *before*
+  the run, not during.
 
 ## 6. Security hygiene (you flagged it — flagging back)
 - `~/.hermes/gateway_state.json` has a **live Telegram token** in an error string. Please scrub +
