@@ -71,7 +71,8 @@ fixture by default — live audio is never on the demo critical path.
   OpenAI-compatible, no key) **and** runs Hermes (`:8642`). For the live demo, run our backend
   **on the GB10** so it reaches both over localhost. Backend points at the model with
   `INFERENCE_BACKEND=nemotron` + `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1`, and at Hermes
-  with `CHAT_BACKEND=hermes` (no key — Hermes is keyless on localhost). `shared/` is the source of truth.
+  with `CHAT_BACKEND=hermes` + `HERMES_WEBHOOK_URL` (the deliver_only Discord route). `shared/` is
+  the source of truth.
 - ⚠️ **`:8080` is taken on the box — run our backend on `:8090`** (`uvicorn app.main:app --port 8090`).
 - ⚠️ **Single-model residency:** ~120 GB unified memory holds only ONE local model at a time.
   Hermes uses *cloud* Gemini so it doesn't compete for VRAM — but voice/embed models would.

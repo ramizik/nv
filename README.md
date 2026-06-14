@@ -94,7 +94,7 @@ Windows: `scripts/windows/*.ps1` + `docs/setup-windows.md`. GB10 wiring: `docs/s
 | Switch | Env vars |
 |--------|----------|
 | Real local inference on GB10 | `INFERENCE_BACKEND=nemotron` · `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1` · `NEMOTRON_MODEL=lifeos-nemotron-120b:latest` (Ollama, no key) |
-| Real staff alert via Hermes bot | `CHAT_BACKEND=hermes` (no key — Hermes is keyless on localhost; backend must run on the GB10 box or tunnel `:8642`) |
+| Real staff alert via Hermes bot | `CHAT_BACKEND=hermes` · `HERMES_WEBHOOK_URL=<deliver_only route>` (deterministic, no LLM; backend runs on the GB10 box or tunnels `:8642`) |
 | Raw Discord webhook (fallback) | `CHAT_BACKEND=discord` · `DISCORD_WEBHOOK_URL=...` |
 
 > **GB10 demo reality:** Nemotron-120B is served via **Ollama** on `:11434`; Hermes (teammate's

@@ -36,14 +36,24 @@ NEMOTRON_API_KEY = os.getenv("NEMOTRON_API_KEY", "not-needed")
 # room — but PRE-WARM before the demo so it's resident. Connect stays fail-fast (see adapter).
 NEMOTRON_TIMEOUT_READ = float(os.getenv("NEMOTRON_TIMEOUT_READ", "90"))
 
-# Hermes — the teammate's RUNNING service on the GB10 box. OpenAI-compatible agent
-# gateway at :8642 that OWNS Discord (bot), memory, and tasks. We hand a finished
-# LeadAnalysis off to it for the staff alert. Hermes runs LOCALLY and needs NO API key —
-# HERMES_API_KEY is optional (only sent as a bearer if you set it). Cross-host note: Hermes
-# binds 127.0.0.1, so this only works if our backend runs ON the GB10 box (recommended) or
-# through an SSH tunnel. See docs/hermes-integration.md.
+# Hermes — the teammate's RUNNING service on the GB10 box (binds 127.0.0.1:8642; owns the
+# Discord bot + #front-desk channel). We hand a finished LeadAnalysis off to it for the alert.
+# TWO ways to reach it (CONFIRMED from the gateway source):
+#
+#  1) PRIMARY — webhook platform in `deliver_only` mode (deliver: discord): NO LLM, on-box,
+#     deterministic, sub-second. Set HERMES_WEBHOOK_URL to the route the Hermes owner adds in
+#     ~/.hermes/config.yaml. Optional per-route HMAC secret (blank = INSECURE_NO_AUTH demo mode).
+#  2) FALLBACK — POST /v1/chat/completions: routes through the agent's model (default cloud
+#     gemini-flash-latest → off-box, non-deterministic). REQUIRES the gateway bearer
+#     HERMES_API_KEY (= API_SERVER_KEY from ~/.hermes/.env). The gateway _check_auth() 401s
+#     ("invalid_api_key") on every request without it. Use only if the webhook isn't wired.
+#
+# Cross-host: Hermes binds 127.0.0.1, so this only works if our backend runs ON the GB10 box
+# (recommended) or via an SSH tunnel. See docs/hermes-integration.md.
 HERMES_BASE_URL = os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642")
-HERMES_API_KEY = os.getenv("HERMES_API_KEY", "")  # optional — Hermes is keyless on localhost
+HERMES_WEBHOOK_URL = os.getenv("HERMES_WEBHOOK_URL", "")          # PRIMARY deliver_only route
+HERMES_WEBHOOK_SECRET = os.getenv("HERMES_WEBHOOK_SECRET", "")    # HMAC secret; blank = no auth
+HERMES_API_KEY = os.getenv("HERMES_API_KEY", "")                  # bearer for the chat fallback
 HERMES_DISCORD_CHANNEL = os.getenv("HERMES_DISCORD_CHANNEL", "1509734278206984194")
 
 # Secondary standalone path only (NOT the bot Hermes owns) — raw Discord webhook.

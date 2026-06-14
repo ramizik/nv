@@ -12,17 +12,20 @@
 
 - A **running service** on the GB10 — **confirmed up**: `GET /health` → 200, `hermes-agent v0.16.0`,
   bound to **`http://127.0.0.1:8642`**.
-- **OpenAI-compatible gateway.** Confirmed endpoints:
-  - `GET /health`
-  - `POST /v1/chat/completions` — **no API key** (Hermes runs locally on the box; auth not enforced)
-- **Owns Discord** via a **bot** (`DISCORD_BOT_TOKEN`) — platform shows **connected**; default
-  channel **`1509734278206984194`** (#general, guild "AGENT"), DM allowlist (`DISCORD_ALLOWED_USERS`).
-- ⚠️ **GAP:** there is **no HTTP endpoint that posts to Discord verbatim** yet. The only verbatim
-  path is the in-process `send_message_tool` / `DiscordAdapter.send()` (Python). The HTTP API is
-  **agent-chat only**. So a deterministic alert requires adding `POST /discord/send` (see §5).
-- **Default reasoning model is CLOUD:** `GOOGLE_API_KEY` → Gemini, plus a cloud NVIDIA NIM
-  delegate (`NVIDIA_API_KEY`, `z-ai/glm-5.1`). It also has voice tool keys (`VOICE_TOOLS_OPENAI_KEY`).
-- Config lives in **`~/.hermes/.env`**.
+- **Gateway auth: a bearer IS required on every route.** `_check_auth()` compares
+  `Authorization: Bearer <token>` to `API_SERVER_KEY` (set in `~/.hermes/.env`); missing/wrong →
+  `401 {"error":{"code":"invalid_api_key"}}`. The server won't even start without the key set.
+  → The "invalid api key" we saw was *this*, not a cloud-model key. (Earlier "keyless" note: wrong.)
+- **Owns Discord** via a **bot** (`DISCORD_BOT_TOKEN`) — connected; home channel
+  **`1509734278206984194`** (`DISCORD_HOME_CHANNEL`), DM allowlist (`DISCORD_ALLOWED_USERS`).
+- **Default chat model is CLOUD:** `gemini-flash-latest` (config.yaml) — off-box, non-deterministic.
+- **No `/discord/send` route exists** (every registered route enumerated: `/v1/chat/completions`,
+  `/v1/responses`, `/v1/runs`, `/api/sessions/*`, `/api/jobs/*`). BUT the deterministic verbatim
+  path we want **already exists as a platform**: the **webhook platform** (`gateway/platforms/webhook.py`)
+  in **`deliver_only: true`** mode with **`deliver: discord`** — skips the agent, routes the POST body
+  straight through the live Discord adapter to a channel (defaults to the home channel). It is just
+  **not enabled in `config.yaml` yet** (no `webhook:` platform block). Enabling it = config, not code.
+- Config lives in **`~/.hermes/.env`** + **`~/.hermes/config.yaml`**.
 
 ### Why this changes our architecture
 Because Hermes defaults to **cloud** models, **we must not send patient conversations through
@@ -36,29 +39,41 @@ So:
 
 ---
 
-## 2. How we call Hermes today (provisional)
+## 2. How we call Hermes (`HermesChatAdapter`)
 
-`backend/app/adapters/chat.py → HermesChatAdapter` POSTs to the **confirmed** endpoint:
+`backend/app/adapters/chat.py` supports both paths; it picks the webhook when its URL is set.
 
+**PRIMARY — webhook `deliver_only` (deterministic, no LLM, on-box).** When `HERMES_WEBHOOK_URL`
+is set we POST the rendered markdown straight to the Hermes webhook route:
 ```
-POST {HERMES_BASE_URL}/v1/chat/completions     # no auth header — Hermes is keyless on localhost
-{ "messages": [ {role:"system",...}, {role:"user", content:"Post this alert to channel <id>: <markdown>"} ] }
+POST {HERMES_WEBHOOK_URL}
+{ "content": "<verbatim markdown alert>", "chat_id": "1509734278206984194" }
+# optional: X-Signature: sha256=<HMAC(secret, raw_body)>  when HERMES_WEBHOOK_SECRET is set
 ```
+`deliver_only` makes the posted body the Discord message — no model, no `gemini-flash`, never
+leaves the box, sub-second. The body field names (`content`, `chat_id`) are **co-designed with
+the route template** in `config.yaml` (see §5) — keep them matching.
 
-It is **fail-safe**: any error (unreachable, 401, timeout) degrades to the preview, so the
+**FALLBACK — `/v1/chat/completions`** (only if no webhook URL): asks the agent to post the alert.
+Requires the gateway bearer (`HERMES_API_KEY = API_SERVER_KEY`) and routes through the cloud
+model — non-deterministic + off-box. Avoid for the real demo.
+
+Both are **fail-safe**: any error (unreachable, 401, timeout) degrades to the preview, so the
 dashboard's Chat Notification panel always renders.
-
-⚠️ **This is provisional.** Routing a *fixed* message through an LLM agent is non-deterministic
-(the agent may reword or not post). We want a deterministic path — see the ask below. When the
-teammate exposes it, we swap the body of `HermesChatAdapter.send()` to call it.
 
 Env (in `.env`):
 ```
 CHAT_BACKEND=hermes
 HERMES_BASE_URL=http://127.0.0.1:8642
-HERMES_API_KEY=                       # leave blank — Hermes is keyless on localhost
 HERMES_DISCORD_CHANNEL=1509734278206984194
+HERMES_WEBHOOK_URL=                   # PRIMARY — the deliver_only route URL (from the owner)
+HERMES_WEBHOOK_SECRET=                # blank = INSECURE_NO_AUTH demo; else the route's HMAC secret
+HERMES_API_KEY=                       # only for the chat fallback (= API_SERVER_KEY)
 ```
+
+⚠️ One thing to confirm against `gateway/platforms/webhook.py`: the **HMAC header name +
+algorithm** (we assume `X-Signature: sha256=<hex over raw body>`). For the demo, an
+`INSECURE_NO_AUTH` route (blank secret) sidesteps this entirely.
 
 ---
 
@@ -92,13 +107,15 @@ path for a reliable demo.
 
 See the ready-to-send checklist in **`docs/ask-hermes-owner.md`**. In short:
 
-1. ~~Share an API key~~ — **not needed**, Hermes is keyless on localhost. ✅
-2. **Add `POST /discord/send {channel, content}`** to the gateway — posts `content` **verbatim**
-   via the existing `DiscordAdapter.send()` (no LLM). ~30 lines. **This is the big one** — it does
-   not exist yet, and the agent-chat path is too non-deterministic for a live alert.
-3. Confirm the **alert channel id** (`1509734278206984194`, #general) is where staff/judges watch.
-4. Help us **co-locate** our backend on the GB10 on **`:8090`** (`:8080` is taken) so `:8642` is reachable.
+1. **Enable a webhook `deliver_only` route** in `~/.hermes/config.yaml` (the `webhook:` platform
+   block doesn't exist yet): `deliver: discord`, `deliver_only: true`, channel defaulting to the
+   home channel, auth `INSECURE_NO_AUTH` for the demo (or an HMAC secret). Make the route template
+   emit the POST body's **`content`** field verbatim. Restart the gateway. **This is the one task.**
+2. Send back: the **route URL**, the **auth mode** (INSECURE_NO_AUTH or HMAC secret + header/algo),
+   and confirm the body field is **`content`** (and `chat_id` overrides the channel).
+3. Confirm the **home channel** (`1509734278206984194`) is where staff/judges watch.
+4. Help us **co-locate** our backend on the GB10 on **`:8090`** (`:8080` is taken).
 
-What they explicitly do **not** need to do: serve a model for us (**Nemotron-120B is already up via
-Ollama on `:11434` — we call it directly**), change Hermes' default model, route our scoring, or
-build any dashboard/scoring logic — we own all of that.
+What they explicitly do **not** need to do: write a custom `/discord/send` route (the webhook
+platform already does this — just enable it); serve a model for us (**Nemotron-120B is already up
+via Ollama `:11434`**); change the default model; or build any scoring/dashboard — we own that.

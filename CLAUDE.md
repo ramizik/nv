@@ -27,8 +27,9 @@
 ## Team: 2 teammates working concurrently
 - **You / this repo:** the **Lead Analyzer** — backend orchestrator + React dashboard.
 - **Teammate A — Hermes owner:** runs **Hermes**, a separate agent gateway
-  (OpenAI-compatible, **:8642**, **keyless on localhost**) that **owns the Discord bot
-  + channel** (`1509734278206984194`). Hermes is *not* our backend — we only hand it a
+  (OpenAI-compatible, **:8642**, **bearer-authed** `API_SERVER_KEY` on every route) that
+  **owns the Discord bot + channel** (`1509734278206984194`). Real alert path = its **webhook
+  `deliver_only`** platform (verbatim, no LLM). Hermes is *not* our backend — we only hand it a
   finished `LeadAnalysis` for the staff alert. See `docs/hermes-integration.md`.
 - **Teammate B — DGX/model owner:** manages the model server + NIM voice services on the box.
 - **Rules of the road:** don't edit Hermes' service; don't restart shared services or swap
