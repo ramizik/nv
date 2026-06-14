@@ -45,8 +45,8 @@ export default function App() {
         <div className="header-right">
           <div className="health-pills">
             <span className={`pill ${backends ? "online" : "offline"}`}><span className="dot" />API {backends ? "online" : "down"}</span>
-            {backends && <span className={`pill ${backends.inference === "nemotron" ? "online" : "mock"}`}><span className="dot" />infer:{backends.inference}</span>}
-            {backends && <span className={`pill ${backends.chat === "discord" ? "online" : "mock"}`}><span className="dot" />chat:{backends.chat}</span>}
+            {backends && <span className={`pill ${backends.inference !== "mock" ? "online" : "mock"}`}><span className="dot" />infer:{backends.inference}</span>}
+            {backends && <span className={`pill ${backends.chat !== "mock" ? "online" : "mock"}`}><span className="dot" />chat:{backends.chat}</span>}
           </div>
           <button className="btn-simulate" onClick={runSimulate} disabled={loading}>
             {loading ? "Analyzing…" : "▶ Simulate Inbound Call"}

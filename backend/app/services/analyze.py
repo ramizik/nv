@@ -84,12 +84,14 @@ def run_analysis(
         actions.append({"type": "create_task", "label": "Created callback reminder: within 30 minutes", "status": "pending"})
     analysis["actions"] = actions
 
-    # system status — _source is set by the Nemotron adapter ('nemotron' | 'mock_fallback')
+    # system status — _source is set by the inference adapter:
+    #   'hermes' (Hermes delegated to local Qwen) | 'qwen' (direct Ollama) | 'mock_fallback'
     source = analysis.pop("_source", None)
-    used_gb10 = config.INFERENCE_BACKEND == "nemotron" and source == "nemotron"
-    if used_gb10:
-        infer_status, infer_detail = "online", f"GB10 Nemotron @ {infer_ms}ms"
-    elif config.INFERENCE_BACKEND == "nemotron":
+    real_backends = ("hermes", "qwen", "nemotron")
+    if config.INFERENCE_BACKEND in real_backends and source in ("hermes", "qwen"):
+        path = "GB10 Qwen via Hermes" if source == "hermes" else "GB10 Qwen (direct)"
+        infer_status, infer_detail = "online", f"{path} @ {infer_ms}ms"
+    elif config.INFERENCE_BACKEND in real_backends:
         infer_status, infer_detail = "degraded", f"GB10 unreachable — heuristic fallback @ {infer_ms}ms"
     else:
         infer_status, infer_detail = "mock", f"local heuristic @ {infer_ms}ms"
@@ -102,7 +104,7 @@ def run_analysis(
         chat_detail = "preview only"
     analysis["system_status"] = [
         {"component": "PersonaPlex (voice)", "status": "mock", "detail": "transcript fixture"},
-        {"component": "Nemotron (scoring)", "status": infer_status, "detail": infer_detail},
+        {"component": "Qwen via Hermes (scoring)", "status": infer_status, "detail": infer_detail},
         {"component": "Lead Analyzer (orchestration)", "status": "online", "detail": "FastAPI in-process"},
         {"component": "Hermes / Discord (alerts)", "status": chat_platform, "detail": chat_detail},
     ]

@@ -5,7 +5,8 @@ the BrightSmile clinic context, so an improvised judge transcript still yields a
 credible analysis. For the known veneers+wedding demo path it additionally grafts the
 polished hand-tuned prose (summary + follow-up draft) so the showcase copy is perfect.
 
-Swap target: app/adapters/nemotron.py implements the same .analyze() against the GB10 box.
+Swap target: app/adapters/inference.py (HermesInferenceAdapter / QwenInferenceAdapter)
+implements the same .analyze() against the GB10 box (via Hermes → local Qwen3-30B).
 """
 import json
 import re

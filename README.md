@@ -36,9 +36,10 @@ surfaces** (chat alert, drafted message, callback task) → render the decision 
 
 ```
 [Voice transcript]──▶ Lead Analyzer (FastAPI) ──▶ LeadAnalysis JSON ──┬──▶ React dashboard
-  PersonaPlex/fixture   │ InferenceAdapter: mock │ nemotron            └──▶ ChatAdapter: mock │ hermes
-                        │   └▶ LOCAL Nemotron model server on GB10          └▶ Hermes (teammate's
-                        └ clinic_context.json (BrightSmile rules)              bot) → Discord #front-desk
+  PersonaPlex/fixture   │ InferenceAdapter: mock │ hermes              └──▶ ChatAdapter: mock │ hermes
+                        │   └▶ Hermes (:8642) ──▶ LOCAL Qwen3-30B          └▶ Hermes (teammate's
+                        │      (Ollama on GB10) — on-box reasoning            bot) → Discord #front-desk
+                        └ clinic_context.json (BrightSmile rules)
 ```
 
 The entire system flows **one canonical object — `LeadAnalysis`**
@@ -47,10 +48,14 @@ The entire system flows **one canonical object — `LeadAnalysis`**
 one machine with zero external deps. Flip **one env var** to use the real GB10 / Hermes;
 both **degrade to mock on error** so the demo can't hard-fail.
 
-**Reasoning runs on the LOCAL Nemotron model server, never through Hermes** — Hermes' own
-default model is cloud Gemini, so routing scoring through it would send patient
-conversations off-box. We reason locally and only hand the *finished* alert to Hermes (which
-owns the Discord bot). Details: `ARCHITECTURE.md` · `docs/hermes-integration.md`.
+**Reasoning routes through Hermes, which delegates to its LOCAL default model — Qwen3-30B,
+served via Ollama on the GB10.** So inference stays **on-box** (patient conversations never
+leave the building) *and* we don't run our own model server. Hermes also owns the Discord
+bot, so the *finished* alert is handed to it too. (A direct-to-Ollama `qwen` adapter exists
+as a fallback if Hermes is down.) Details: `ARCHITECTURE.md` · `docs/hermes-integration.md`.
+
+> **Pitch:** Voice, reasoning (Qwen via Hermes), and the Discord alert all run locally on the
+> Dell Pro Max GB10 — nothing leaves the building.
 
 ## Repo layout
 
@@ -58,7 +63,7 @@ owns the Discord bot). Details: `ARCHITECTURE.md` · `docs/hermes-integration.md
 |------|------|---------|
 | `backend/` | FastAPI orchestrator + adapters | either |
 | `frontend/` | React + Vite + TS dashboard | Windows dev |
-| `inference/remote/` | GB10 model-server start/health scripts | **remote NVIDIA Linux** |
+| `inference/remote/` | GB10 Hermes/Ollama health scripts | **remote NVIDIA Linux** |
 | `inference/local/` | mock inference + sample I/O | either |
 | `shared/` | clinic context, schemas, sample payloads (cross-machine source of truth) | either |
 | `scripts/{windows,linux}/` | setup + run helpers | Windows / Linux |
@@ -93,14 +98,17 @@ Windows: `scripts/windows/*.ps1` + `docs/setup-windows.md`. GB10 wiring: `docs/s
 
 | Switch | Env vars |
 |--------|----------|
-| Real local inference on GB10 | `INFERENCE_BACKEND=nemotron` · `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1` · `NEMOTRON_MODEL=lifeos-nemotron-120b:latest` (Ollama, no key) |
-| Real staff alert via Hermes bot | `CHAT_BACKEND=hermes` · `HERMES_WEBHOOK_URL=<deliver_only route>` (deterministic, no LLM; backend runs on the GB10 box or tunnels `:8642`) |
+| Real on-box inference via Hermes → Qwen | `INFERENCE_BACKEND=hermes` · `HERMES_BASE_URL=http://127.0.0.1:8642` · `HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>` · `HERMES_INFERENCE_MODEL=` (blank = Hermes default Qwen3-30B; set `lifeos-nemotron-120b:latest` to force heavier reasoning) |
+| Real staff alert via Hermes bot | `CHAT_BACKEND=hermes` · `HERMES_BASE_URL=http://127.0.0.1:8642` · `HERMES_DISCORD_CHANNEL=1509734278206984194` (backend runs on the GB10 box or tunnels `:8642`) |
+| Direct-to-Ollama inference (fallback, if Hermes down) | `INFERENCE_BACKEND=qwen` (legacy alias `nemotron`) · `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1` · `NEMOTRON_MODEL=lifeos-qwen3-30b` (Ollama, no key) |
 | Raw Discord webhook (fallback) | `CHAT_BACKEND=discord` · `DISCORD_WEBHOOK_URL=...` |
 
-> **GB10 demo reality:** Nemotron-120B is served via **Ollama** on `:11434`; Hermes (teammate's
-> service, owns Discord) binds `127.0.0.1:8642`; **`:8080` is taken so run our backend on `:8090`**.
-> ⚠️ ~120 GB total ⇒ **only ONE local model resident at a time** — pre-warm exactly the demo
-> model. See `docs/hermes-integration.md` for the seam, topology, and the Hermes-owner checklist.
+> **GB10 demo reality:** Hermes (teammate's service, owns Discord) binds `127.0.0.1:8642` and
+> delegates reasoning to **local Qwen3-30B** (≈18 GB, MoE ~3B active → fast) served via Ollama
+> on `:11434`; it coexists with the NIM voice stack. Nemotron-120B (≈82 GB) is an optional
+> heavier/slower alternative. **`:8080` is taken so run our backend on `:8090`**.
+> ⚠️ 128 GB unified ⇒ **only ONE large local model resident at a time** — pre-warm exactly the
+> demo model. See `docs/hermes-integration.md` for the seam, topology, and the Hermes-owner checklist.
 
 ## API (full contract in `docs/integration-plan.md`)
 

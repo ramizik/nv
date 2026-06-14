@@ -7,10 +7,15 @@ from app.adapters.chat import MockChatAdapter, HermesChatAdapter, DiscordChatAda
 
 
 def get_inference_adapter() -> InferenceAdapter:
-    if config.INFERENCE_BACKEND == "nemotron":
-        # Imported lazily so the demo never fails to boot if httpx/endpoint is unhappy
-        from app.adapters.nemotron import NemotronInferenceAdapter
-        return NemotronInferenceAdapter()
+    # Imported lazily so the demo never fails to boot if httpx/endpoint is unhappy.
+    # 'hermes' = REAL path (Hermes delegates reasoning to local Qwen3-30B on the GB10).
+    # 'qwen'/'nemotron' = DIRECT-to-Ollama fallback (we call the model ourselves).
+    if config.INFERENCE_BACKEND == "hermes":
+        from app.adapters.inference import HermesInferenceAdapter
+        return HermesInferenceAdapter()
+    if config.INFERENCE_BACKEND in ("qwen", "nemotron"):
+        from app.adapters.inference import QwenInferenceAdapter
+        return QwenInferenceAdapter()
     return MockInferenceAdapter()
 
 

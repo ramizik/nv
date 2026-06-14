@@ -33,16 +33,21 @@ npm run dev          # http://localhost:5173
 Or: `.\scripts\windows\run_frontend.ps1`
 
 ## Pointing at the remote GB10 box (optional, for real inference)
-Nemotron-120B is served on the box via **Ollama** at `:11434` (no key). Edit `.env`:
+The real path routes reasoning through **Hermes** (`:8642`), which delegates to its local
+default model **Qwen3-30B** on the box's Ollama. We run no model server of our own. Edit `.env`
+(`HERMES_API_KEY` = `API_SERVER_KEY` from the box's `~/.hermes/.env`):
 ```
-INFERENCE_BACKEND=nemotron
-NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1
-NEMOTRON_MODEL=lifeos-nemotron-120b:latest
+INFERENCE_BACKEND=hermes
+CHAT_BACKEND=hermes
+HERMES_BASE_URL=http://127.0.0.1:8642
+HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>
+HERMES_INFERENCE_MODEL=        # blank = Hermes default (local Qwen3-30B)
 ```
-Ollama binds localhost on the box, so from Windows you must tunnel:
-`ssh -L 11434:localhost:11434 user@<gb10-host>`, then use `http://127.0.0.1:11434/v1`.
+Hermes binds localhost on the box, so from Windows you must tunnel:
+`ssh -L 8642:localhost:8642 user@<gb10-host>`, then use `http://127.0.0.1:8642`.
 For the live demo we instead run the **backend on the GB10** (`:8090`) — see
-`docs/setup-remote-nvidia.md` and `docs/hermes-integration.md`.
+`docs/setup-remote-nvidia.md` and `docs/hermes-integration.md`. (Fallback: `INFERENCE_BACKEND=qwen`
+talks directly to Ollama at `:11434` — tunnel `11434` too; see `docs/setup-remote-nvidia.md`.)
 
 ## Discord alert (optional)
 The real path hands off to the teammate's Hermes bot (`CHAT_BACKEND=hermes`); the raw webhook

@@ -58,9 +58,13 @@ TS types live in `frontend/src/types/` — mirror the schema. For dev with no ba
 import `inference/local/sample_outputs/veneers_wedding.analysis.json` as a fixture.
 
 ## Mock → real swap (no frontend changes)
+Both reasoning and alerts now go through **Hermes** (the on-box agent gateway). Hermes' default
+model is **local Qwen3-30B** (Ollama on the GB10), so routing through it keeps everything on-box.
+See `docs/hermes-integration.md` for the full contract.
+
 | Switch | Env | Effect |
 |--------|-----|--------|
-| Real inference | `INFERENCE_BACKEND=nemotron` + `NEMOTRON_BASE_URL` | `score`/`extracted` come from GB10 Nemotron |
-| Real chat | `CHAT_BACKEND=discord` + `DISCORD_WEBHOOK_URL` | `notification.sent=true`, message posts to Discord |
+| Real inference | `INFERENCE_BACKEND=hermes` + `HERMES_BASE_URL` + `HERMES_API_KEY` | `score`/`extracted` come from Hermes' local Qwen3-30B (`HERMES_INFERENCE_MODEL` blank = default) |
+| Real chat | `CHAT_BACKEND=hermes` + `HERMES_WEBHOOK_URL` (+ `HERMES_WEBHOOK_SECRET`) | `notification.sent=true`, alert posts to Discord via the `deliver_only` webhook route (chat-completions fallback if no webhook URL) |
 
 Both degrade to mock on error — the contract never changes.

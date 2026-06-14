@@ -20,11 +20,14 @@ Please answer all of the following, with concrete values (paths, ports, exact fi
 2. **How is it started**, and on what **host:port**? (exact command + any required env vars)
 3. List its **public endpoints / entry points** I can call — for each: method, path, purpose,
    and a sample request + response body (real JSON, not described).
-4. Does Hermes already do **lead scoring / qualification / LLM reasoning**? If yes, describe
-   the input it expects and the output object it returns (full field list). This is the most
-   important question — it tells us who owns scoring.
-5. Does it talk to the **GB10 Nemotron** model itself? If so: what endpoint URL, what served
-   model id, what serving engine (vLLM / NIM / Ollama / TGI), and is an API key required?
+4. Does Hermes already do **lead scoring / qualification**? If yes, describe the input it
+   expects and the output object it returns (full field list). (We own scoring logic; we just
+   want Hermes' gateway to relay the LLM reasoning — so this tells us where the seam is.)
+5. **What local model does Hermes delegate to by default** (we expect **Qwen3-30B via Ollama**
+   on this box)? Confirm: served model id, serving engine (Ollama / vLLM / NIM), endpoint URL,
+   and whether an API key/bearer (`API_SERVER_KEY`) is required to call `/v1/chat/completions`.
+   Critical: confirm the default is a **local** model (not a cloud model), so reasoning stays
+   on-box.
 
 ### B. Discord — how alerts are sent
 6. How does Hermes post to Discord — bot token + channel, or webhook URL? Which channel(s)?
@@ -39,11 +42,14 @@ Please answer all of the following, with concrete values (paths, ports, exact fi
     and where does the final result **exit** (Discord? a DB? an API response?)? Draw the flow.
 
 ### D. The integration seam — where do WE plug in?
-11. Given that we produce a complete `LeadAnalysis` (transcript + extracted slots + hot/warm/cold
-    score + deal value + next-best-action), what is the **cleanest single hand-off point**:
+11. Our plan: route reasoning through Hermes `/v1/chat/completions` (→ local Qwen3-30B), and
+    deliver the alert via Hermes' Discord path. Given that we produce a complete `LeadAnalysis`
+    (transcript + extracted slots + hot/warm/cold score + deal value + next-best-action), what
+    is the **cleanest single hand-off point**:
     - Option A: we POST our `LeadAnalysis` to a Hermes endpoint and Hermes handles Discord + tasks.
     - Option B: Hermes calls *us* to score, then continues its own flow.
-    - Option C: we both call Nemotron independently and only share Discord formatting.
+    - Option C: we call Hermes for reasoning (→ Qwen) + the Discord deliver path, owning the
+      orchestration ourselves.
     Recommend one, and tell me the exact endpoint/function signature to use.
 12. Anything already built that we should **stop building** (e.g. you already do Discord alerts,
     so our ChatAdapter should just call yours)? List concrete overlaps.

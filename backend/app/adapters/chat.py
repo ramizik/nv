@@ -63,9 +63,10 @@ class HermesChatAdapter(ChatAdapter):
     on-box, deterministic, sub-second — exactly what a live demo needs. Optional per-route HMAC
     (HERMES_WEBHOOK_SECRET); blank = INSECURE_NO_AUTH demo mode.
 
-    FALLBACK — POST /v1/chat/completions. Routes through the agent's model (default cloud
-    gemini-flash-latest) and REQUIRES the gateway bearer (HERMES_API_KEY = API_SERVER_KEY).
-    Non-deterministic + off-box; used only when no webhook URL is configured.
+    FALLBACK — POST /v1/chat/completions. Routes through Hermes' agent + its local default
+    model (Qwen3-30B on the GB10 — on-box, NOT cloud) and REQUIRES the gateway bearer
+    (HERMES_API_KEY = API_SERVER_KEY). Still on-prem, but LLM-mediated so non-deterministic;
+    used only when no webhook URL is configured.
 
     Either path is fail-safe: never raises; degrades to the preview so the dashboard always renders.
     """

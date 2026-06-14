@@ -64,7 +64,7 @@
   },
   "system_status": [
     { "component": "PersonaPlex (voice)", "status": "mock", "detail": "pre-recorded transcript fixture" },
-    { "component": "Nemotron (scoring)", "status": "mock", "detail": "golden fixture — flip INFERENCE_BACKEND=nemotron for GB10" },
+    { "component": "Qwen via Hermes (scoring)", "status": "mock", "detail": "golden fixture — flip INFERENCE_BACKEND=hermes for GB10 Qwen" },
     { "component": "Hermes (orchestration)", "status": "online", "detail": "FastAPI in-process" },
     { "component": "Discord (alerts)", "status": "mock", "detail": "preview only — set DISCORD_WEBHOOK_URL to go live" }
   ]

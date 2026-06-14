@@ -67,19 +67,21 @@ flows through the whole system. Voice produces a transcript → backend enriches
 |------------|------|--------|
 | Real-time / simulated voice intake | PersonaPlex (fixture default) | mock |
 | **Our** lead-analysis orchestrator | **Lead Analyzer** = FastAPI (`backend/app`) | live |
-| Reasoning + lead scoring + next-best-action | **Nemotron-Super** on GB10, called *directly/locally* (mock heuristic fallback) | mock→real |
-| Cheap extraction/routing (optional) | Qwen3-30B (also on the box) | stretch |
-| Messaging / memory / tasks + Discord bot | **Hermes** = teammate's running service `:8642` (we hand off to it) | live (theirs) |
+| Reasoning + lead scoring + next-best-action | **Hermes** gateway → local **Qwen3-30B** on GB10 (mock heuristic fallback) | mock→real |
+| Heavier reasoning (optional) | Nemotron-120B via Hermes (`HERMES_INFERENCE_MODEL=lifeos-nemotron-120b:latest`) | stretch |
+| Messaging / memory / tasks + Discord bot | **Hermes** = teammate's running service `:8642` (reasoning + Discord alert) | live (theirs) |
 | Dashboard | React + Vite + TypeScript | done |
 | Staff notifications | **Discord** via Hermes' bot (mock preview default) | mock→real |
 
 > ⚠️ **Correction (learned mid-build):** "Hermes" is the **teammate's** service, not our
-> backend. Our backend is the **Lead Analyzer**. We reason on the *local* Nemotron model
-> server (NOT through Hermes, whose default model is cloud Gemini) and hand the finished
-> `LeadAnalysis` to Hermes for the Discord alert. See `docs/hermes-integration.md`.
+> backend. Our backend is the **Lead Analyzer**. We do **not** run our own model server —
+> we route reasoning **through Hermes**, which delegates to its **local default model,
+> Qwen3-30B** (Ollama on the GB10). Inference stays **on-box**. (Earlier note that Hermes'
+> default was cloud Gemini was wrong — its default is local Qwen3-30B; routing through it is
+> intended.) Hermes also owns the Discord alert. See `docs/hermes-integration.md`.
 
 ### Two swap-points (mock ↔ real, env-toggled, fail-safe)
-- `InferenceAdapter`: `mock` (rule-based scoring off clinic context) ↔ `nemotron` (local GB10 model server).
+- `InferenceAdapter`: `mock` (rule-based scoring off clinic context) ↔ `hermes` (route reasoning through Hermes → local Qwen3-30B). Optional `qwen` (legacy alias `nemotron`) = DIRECT-to-Ollama (`:11434/v1`) fallback, used ONLY if Hermes is down.
 - `ChatAdapter`: `mock` (preview) ↔ `hermes` (hand off to teammate's bot) ↔ `discord` (raw webhook fallback).
 Both default to mock and **degrade to mock/preview on any error** — the demo can never hard-fail.
 
@@ -117,7 +119,8 @@ System Health / Model Status. (Plus the Estimated Deal Value money-shot.)
 - [x] BrightSmile clinic context + veneers scenario payload + golden output fixture
 - [x] FastAPI orchestrator: `/api/health|clinic|analyze|simulate|leads`
 - [x] `InferenceAdapter` (mock = genuine rule-based extraction + scoring) + `ChatAdapter` (mock)
-- [x] `NemotronInferenceAdapter` + `DiscordChatAdapter` written behind flags (fail-safe)
+- [x] Real inference adapters (`HermesInferenceAdapter` + `QwenInferenceAdapter`, in
+      `backend/app/adapters/inference.py`) + `DiscordChatAdapter` written behind flags (fail-safe)
 - [x] **Verified**: `/api/simulate` → HOT 92/0.91, actions, notification, system status
 - [x] Core docs: README, ARCHITECTURE, DEMO_SCRIPT, integration-plan, setup-windows/remote, judging-story
 
@@ -133,26 +136,27 @@ System Health / Model Status. (Plus the Estimated Deal Value money-shot.)
 - [ ] (optional later) polish pass: transcript auto-scroll/stream feel, micro-animations
 
 ### Phase / Layer 3 — Real integrations (target 15:30–16:40)
-**Milestone M3: GB10 Nemotron produces the score + alert hands off to Hermes.**
+**Milestone M3: Hermes (→ local Qwen3-30B) produces the score + alert hands off to Hermes.**
 
-_Scoring (ours — local Nemotron):_
-- [x] Nemotron adapter hardened: overlay-on-mock-skeleton, `<think>`/fence/prose-tolerant JSON
+_Scoring (route through Hermes → local Qwen3-30B):_
+- [x] Inference adapter hardened: overlay-on-mock-skeleton, `<think>`/fence/prose-tolerant JSON
       parse, response_format retry, fail-fast connect (5s) + long read (60s), `_source` marker
-- [x] Decision: serve **Nemotron-Super** (on-brand, `detailed thinking off` toggle works as-is)
-- [x] System Health reflects real state: online (GB10 @ Xms) / degraded (fallback) / mock
-- [x] `backend/test_nemotron.py` one-shot connectivity test
-- [x] **RESOLVED (confirmed on the GB10 box):** a Nemotron model is already served locally via
-      **Ollama** (OpenAI-compatible) — `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1`,
-      `NEMOTRON_MODEL=lifeos-nemotron-120b:latest` (Nemotron-H MoE, 120B, 1M ctx, tools+thinking).
-      `lifeos-qwen3-30b:latest` is also up for the optional cheap-extraction path.
-      No API key needed (`NEMOTRON_API_KEY=not-needed`). ⚠️ Reality differs from the earlier
-      "serve Nemotron-Super via vLLM on :8000" plan — see decision in Phase 5 below.
-- [ ] Run `test_nemotron.py` against `:11434/v1` → confirm `_source: nemotron`
-- [ ] End-to-end: `INFERENCE_BACKEND=nemotron` → dashboard shows "GB10 Nemotron @ Xms"
+- [x] Decision: route reasoning **through Hermes**, which delegates to its **local default
+      Qwen3-30B** (fast, resident, coexists with the NIM voice stack). No own model server.
+- [x] System Health reflects real state: online (Hermes @ Xms) / degraded (fallback) / mock
+- [x] `backend/test_hermes_inference.py` one-shot connectivity test
+- [x] **RESOLVED (confirmed on the GB10 box):** Hermes' OpenAI-compatible gateway is up at
+      `http://127.0.0.1:8642/v1`, defaulting to local **Qwen3-30B** (~18 GB, MoE ~3B active →
+      fast). Optional heavier reasoning via `HERMES_INFERENCE_MODEL=lifeos-nemotron-120b:latest`
+      (≈82 GB, slower, monopolizes the box). Underneath, models are served by Ollama on the box;
+      a direct `:11434/v1` call is kept ONLY as a fallback if Hermes is down (`qwen` adapter).
+      ⚠️ Reality differs from the earlier "serve Nemotron-Super via vLLM on :8000" plan.
+- [ ] Run `test_hermes_inference.py` against `:8642/v1` → confirm `_source: hermes`
+- [ ] End-to-end: `INFERENCE_BACKEND=hermes` → dashboard shows "Hermes → Qwen3-30B @ Xms"
 
 _Messaging (hand off to teammate's Hermes — `:8642`, owns Discord bot):_
 - [x] Learned Hermes' real shape: OpenAI-compatible gateway, bearer `API_SERVER_KEY`, Discord
-      bot + channel `1509734278206984194`, default model cloud Gemini (⇒ we keep reasoning local)
+      bot + channel `1509734278206984194`, default model **local Qwen3-30B** (⇒ on-box reasoning)
 - [x] `HermesChatAdapter` scaffolded (`CHAT_BACKEND=hermes`), fail-safe to preview
 - [x] Docs corrected: our backend = Lead Analyzer, NOT Hermes; `docs/hermes-integration.md` + ask doc
 - [x] **CONFIRMED from gateway source:** Hermes running, `GET /health` → 200 (`hermes-agent v0.16.0`),
@@ -171,20 +175,23 @@ _Messaging (hand off to teammate's Hermes — `:8642`, owns Discord bot):_
 - [ ] (stretch) PersonaPlex recorded voice → transcript
 
 ### Phase / Layer 5 — Integration execution on the GB10 box ⬅ NEXT MUST-DO
-**Milestone M5: live, deterministic end-to-end on one box — `/api/simulate` → real Nemotron
-score → verbatim Discord alert.** Ordered by dependency; each step is small and reversible.
+**Milestone M5: live, deterministic end-to-end on one box — `/api/simulate` → real reasoning
+(Hermes → local Qwen3-30B) → verbatim Discord alert.** Ordered by dependency; each step is
+small and reversible.
 
-_Reasoning path (point at the model that's actually running):_
-- [ ] Set backend `.env`: `INFERENCE_BACKEND=nemotron`,
-      `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1`, `NEMOTRON_MODEL=lifeos-nemotron-120b:latest`,
-      `NEMOTRON_API_KEY=not-needed`.
-- [ ] **Decision (Nemotron serving):** keep the **already-running Ollama 120B** (zero setup,
-      reliable, tools+thinking) rather than standing up vLLM Nemotron-Super on `:8000`. Update
-      `inference/remote/*.sh` + README/ARCH wording from "vLLM :8000" to "Ollama :11434/v1" so
-      docs match reality. (vLLM remains a documented alternative, not the demo path.)
-- [ ] Run `backend/test_nemotron.py` against `:11434/v1`; confirm clean JSON + `_source: nemotron`.
-      The 120B may be slow on first token — sanity-check latency vs the 60s read timeout; if tight,
-      fall back to `lifeos-qwen3-30b:latest` for the demo.
+_Reasoning path (route through Hermes, which delegates to the local model):_
+- [ ] Set backend `.env`: `INFERENCE_BACKEND=hermes`, `CHAT_BACKEND=hermes`,
+      `HERMES_BASE_URL=http://127.0.0.1:8642`, `HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>`,
+      `HERMES_INFERENCE_MODEL=` (blank = Hermes default Qwen3-30B; set `lifeos-nemotron-120b:latest`
+      for heavier reasoning), `HERMES_DISCORD_CHANNEL=1509734278206984194`.
+- [ ] **Decision (reasoning serving):** route reasoning **through Hermes → its local default
+      Qwen3-30B** (on-box, fast, coexists with voice) rather than running our own model server.
+      Direct-to-Ollama (`:11434/v1`, the `qwen`/legacy `nemotron` adapter) is kept ONLY as a
+      fallback for when Hermes is down. Update `inference/remote/*.sh` + README/ARCH wording from
+      "vLLM :8000" / "Ollama direct" to "via Hermes :8642/v1 → local Qwen3-30B" so docs match reality.
+- [ ] Run `backend/test_hermes_inference.py` against `:8642/v1`; confirm clean JSON + `_source: hermes`.
+      Qwen3-30B is fast on first token; if you switch `HERMES_INFERENCE_MODEL` to the 120B, sanity-check
+      latency vs the 60s read timeout before the demo.
 
 _Messaging path (enable the deterministic seam — CONFIG on the Hermes side, no new route code):_
 - [ ] **Hermes owner: enable a webhook `deliver_only` route** in `~/.hermes/config.yaml`
@@ -198,11 +205,11 @@ _Messaging path (enable the deterministic seam — CONFIG on the Hermes side, no
       `HERMES_WEBHOOK_URL=<route>`, `HERMES_DISCORD_CHANNEL=1509734278206984194`.
 
 _Co-location & wiring (Hermes binds 127.0.0.1, so the backend must live on this box):_
-- [ ] Run our FastAPI backend **on the GB10** so Nemotron (`:11434`) and Hermes (`:8642`) are both localhost.
+- [ ] Run our FastAPI backend **on the GB10** so Hermes (`:8642`, and its local Ollama at `:11434`) is localhost.
 - [ ] ⚠️ **Port collision:** `:8080` is already taken on this box (a uvicorn is bound there).
       Run our backend on a free port (e.g. `:8090`) and update `VITE_API_BASE` / `CORS_ORIGINS` to match.
-- [ ] End-to-end smoke: `curl -X POST http://127.0.0.1:8090/api/simulate` → HOT score from the
-      real model + the alert visibly lands in Discord, exactly as formatted.
+- [ ] End-to-end smoke: `curl -X POST http://127.0.0.1:8090/api/simulate` → HOT score from
+      Hermes → local Qwen3-30B + the alert visibly lands in Discord, exactly as formatted.
 
 _Security (carry-over, do not skip):_
 - [ ] Rotate the GitHub PAT used to push this update (it was shared in plaintext).
@@ -224,9 +231,9 @@ _Security (carry-over, do not skip):_
 ## 4. Risk register & fallbacks
 | Risk | Fallback |
 |------|----------|
-| GB10 model server flaky/slow | `INFERENCE_BACKEND=mock` — heuristic scores identically for the demo |
-| 120B cold/slow on first token | **Pre-warm** before the demo (`ollama run` once / `test_nemotron.py`); read timeout 90s |
-| ~120 GB ⇒ only ONE model resident | Load exactly the demo scoring model; voice/embed stay unloaded (voice = fixture). Switch to `lifeos-qwen3-30b:latest` only *before* the run, never mid-demo |
+| Hermes gateway flaky/slow | `INFERENCE_BACKEND=mock` — heuristic scores identically; or `INFERENCE_BACKEND=qwen` (direct-to-Ollama `:11434/v1`) as a backstop if Hermes is down |
+| Heavier 120B model cold/slow on first token | Keep the default **Qwen3-30B** (fast, resident); only set `HERMES_INFERENCE_MODEL=lifeos-nemotron-120b:latest` after pre-warming; read timeout 90s |
+| ~120 GB ⇒ only ONE model resident | Default Qwen3-30B (~18 GB) coexists with the NIM voice stack; the 120B (~82 GB) monopolizes the box — switch to it only *before* the run, never mid-demo |
 | Discord webhook fails | Chat Notification Preview panel shows the alert anyway |
 | Live voice unreliable | Transcript fixture (default) — never put a mic on the critical path |
 | Frontend not done in time | Backend `/docs` (Swagger) + `curl /api/simulate` still tells the story |

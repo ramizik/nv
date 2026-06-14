@@ -20,7 +20,7 @@ and consistently — and hands staff a qualified, scored, ready-to-act lead.
 ## Why local / on-prem (the Dell × NVIDIA GB10 angle)
 - **Privacy:** patient health conversations never leave the building — no cloud, no BAA risk.
 - **Always-on & cheap per-call:** no per-token cloud bill on every after-hours call.
-- **Latency:** reasoning in ~100–150ms on the GB10.
+- **Latency:** reasoning (Qwen3-30B via Hermes) in ~100–150ms on the GB10.
 - This is exactly the "always-on business agent running locally" the track asks for.
 
 ## ROI math (say this out loud)
@@ -40,7 +40,7 @@ and consistently — and hands staff a qualified, scored, ready-to-act lead.
 1. Natural transcript (voice surface)
 2. HOT 92/100 with reason chips + $7.2k–$16k value (reasoning surface)
 3. Live Discord alert + drafted message (action surface)
-4. System Health showing GB10/local (on-prem proof)
+4. System Health showing GB10/local — "Qwen via Hermes" (on-prem proof)
 
 ## Boundaries (say this to preempt "is this a CRM?")
 > "We deliberately did one vertical, one workflow, end-to-end and reliable — not a half-built

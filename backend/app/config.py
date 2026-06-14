@@ -18,39 +18,45 @@ CLINIC_CONTEXT_PATH = SHARED_DIR / "clinic_context" / "brightsmile.json"
 SAMPLE_PAYLOADS_DIR = SHARED_DIR / "sample_payloads"
 GOLDEN_OUTPUTS_DIR = REPO_ROOT / "inference" / "local" / "sample_outputs"
 
-# 'mock' | 'nemotron'  — mock is the safe default for the demo
+# 'mock' | 'hermes'  — mock is the safe default for the demo. 'hermes' = the REAL path:
+# we send the transcript to Hermes, which delegates the reasoning to its local default model
+# (Qwen3-30B) on the GB10. ('qwen'/'nemotron' = optional DIRECT-to-Ollama fallback, used only
+# if Hermes is unavailable — see the QWEN_* block below.)
 INFERENCE_BACKEND = os.getenv("INFERENCE_BACKEND", "mock").lower()
 # 'mock' | 'hermes' | 'discord'  — how the staff alert is delivered
 CHAT_BACKEND = os.getenv("CHAT_BACKEND", "mock").lower()
 
-# Local GB10 model server — used when INFERENCE_BACKEND=nemotron. CONFIRMED on the box:
-# a Nemotron-120B is served via **Ollama** (OpenAI-compatible) at :11434/v1, no API key.
-# We call this DIRECTLY, NOT through Hermes: Hermes' default model is cloud Gemini, and
-# routing reasoning through it would send patient conversations off-box and break the
-# "nothing leaves the building" claim. NOTE: ~120 GB unified memory ⇒ only ONE local
-# model resident at a time — keep exactly this model loaded for the demo (no voice/embed).
-NEMOTRON_BASE_URL = os.getenv("NEMOTRON_BASE_URL", "http://127.0.0.1:11434/v1")
-NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "lifeos-nemotron-120b:latest")
-NEMOTRON_API_KEY = os.getenv("NEMOTRON_API_KEY", "not-needed")
-# Read timeout (s) for a model call. The 120B can be slow on a cold first token, so allow
-# room — but PRE-WARM before the demo so it's resident. Connect stays fail-fast (see adapter).
-NEMOTRON_TIMEOUT_READ = float(os.getenv("NEMOTRON_TIMEOUT_READ", "90"))
-
-# Hermes — the teammate's RUNNING service on the GB10 box (binds 127.0.0.1:8642; owns the
-# Discord bot + #front-desk channel). We hand a finished LeadAnalysis off to it for the alert.
-# TWO ways to reach it (CONFIRMED from the gateway source):
-#
-#  1) PRIMARY — webhook platform in `deliver_only` mode (deliver: discord): NO LLM, on-box,
-#     deterministic, sub-second. Set HERMES_WEBHOOK_URL to the route the Hermes owner adds in
-#     ~/.hermes/config.yaml. Optional per-route HMAC secret (blank = INSECURE_NO_AUTH demo mode).
-#  2) FALLBACK — POST /v1/chat/completions: routes through the agent's model (default cloud
-#     gemini-flash-latest → off-box, non-deterministic). REQUIRES the gateway bearer
-#     HERMES_API_KEY (= API_SERVER_KEY from ~/.hermes/.env). The gateway _check_auth() 401s
-#     ("invalid_api_key") on every request without it. Use only if the webhook isn't wired.
-#
-# Cross-host: Hermes binds 127.0.0.1, so this only works if our backend runs ON the GB10 box
-# (recommended) or via an SSH tunnel. See docs/hermes-integration.md.
+# Hermes — the teammate's RUNNING service on the GB10 box (binds 127.0.0.1:8642; OpenAI-
+# compatible; owns the Discord bot + #front-desk channel). It is our SINGLE integration point:
+#   • Reasoning  (INFERENCE_BACKEND=hermes): we POST the transcript to /v1/chat/completions and
+#     Hermes delegates to its local default model — CONFIRMED Qwen3-30B served via Ollama on the
+#     GB10 (NOT cloud Gemini, as an earlier note wrongly assumed). So reasoning stays ON-BOX and
+#     patient conversations never leave the building — and we don't run our own model server.
+#   • Alerts     (CHAT_BACKEND=hermes): Hermes relays the finished LeadAnalysis to Discord.
+# Every Hermes route needs the gateway bearer HERMES_API_KEY (= API_SERVER_KEY from
+# ~/.hermes/.env); the gateway _check_auth() 401s ("invalid_api_key") without it. The model
+# behind Hermes is itself keyless. Cross-host: Hermes binds 127.0.0.1, so this only works when
+# our backend runs ON the GB10 box (recommended) or via an SSH tunnel. See docs/hermes-integration.md.
 HERMES_BASE_URL = os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642")
+# Optional model override for the reasoning call. Blank = let Hermes use its configured default
+# (Qwen3-30B), which is what we want. Set e.g. "lifeos-nemotron-120b:latest" only to force the
+# heavier deep-reasoning model (slower, monopolizes the box).
+HERMES_INFERENCE_MODEL = os.getenv("HERMES_INFERENCE_MODEL", "")
+# Read timeout (s) for the reasoning call via Hermes. Qwen3-30B is fast when resident; bump it
+# if you point Hermes at the 120B. Connect stays fail-fast (see adapter).
+HERMES_TIMEOUT_READ = float(os.getenv("HERMES_TIMEOUT_READ", "60"))
+
+# DIRECT-to-Ollama FALLBACK (INFERENCE_BACKEND=qwen) — bypasses Hermes and calls the local
+# Ollama OpenAI endpoint ourselves. Use only if Hermes is down. Qwen3-30B (~18 GB, MoE ~3B
+# active) is fast and coexists with the NIM voice stack; lifeos-nemotron-120b:latest (~82 GB)
+# is the heavier alternative. Legacy NEMOTRON_* env vars are still honored as a fallback.
+QWEN_BASE_URL = os.getenv("QWEN_BASE_URL", os.getenv("NEMOTRON_BASE_URL", "http://127.0.0.1:11434/v1"))
+QWEN_MODEL = os.getenv("QWEN_MODEL", os.getenv("NEMOTRON_MODEL", "Qwen3-30B:latest"))
+QWEN_API_KEY = os.getenv("QWEN_API_KEY", os.getenv("NEMOTRON_API_KEY", "not-needed"))
+QWEN_TIMEOUT_READ = float(os.getenv("QWEN_TIMEOUT_READ", os.getenv("NEMOTRON_TIMEOUT_READ", "60")))
+# Reasoning-off directive prepended to the system prompt. Qwen3 uses "/no_think"; for the
+# Nemotron alias set this to "detailed thinking off". Leftover <think> blocks are stripped either way.
+QWEN_THINKING_DIRECTIVE = os.getenv("QWEN_THINKING_DIRECTIVE", "/no_think")
 HERMES_WEBHOOK_URL = os.getenv("HERMES_WEBHOOK_URL", "")          # PRIMARY deliver_only route
 HERMES_WEBHOOK_SECRET = os.getenv("HERMES_WEBHOOK_SECRET", "")    # HMAC secret; blank = no auth
 HERMES_API_KEY = os.getenv("HERMES_API_KEY", "")                  # bearer for the chat fallback
