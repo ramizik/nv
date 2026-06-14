@@ -14,7 +14,7 @@
   bound to **`http://127.0.0.1:8642`**.
 - **OpenAI-compatible gateway.** Confirmed endpoints:
   - `GET /health`
-  - `POST /v1/chat/completions` — bearer auth: `Authorization: Bearer $API_SERVER_KEY` (set in `~/.hermes/.env`)
+  - `POST /v1/chat/completions` — **no API key** (Hermes runs locally on the box; auth not enforced)
 - **Owns Discord** via a **bot** (`DISCORD_BOT_TOKEN`) — platform shows **connected**; default
   channel **`1509734278206984194`** (#general, guild "AGENT"), DM allowlist (`DISCORD_ALLOWED_USERS`).
 - ⚠️ **GAP:** there is **no HTTP endpoint that posts to Discord verbatim** yet. The only verbatim
@@ -41,8 +41,7 @@ So:
 `backend/app/adapters/chat.py → HermesChatAdapter` POSTs to the **confirmed** endpoint:
 
 ```
-POST {HERMES_BASE_URL}/v1/chat/completions
-Authorization: Bearer {HERMES_API_KEY}     # = Hermes' API_SERVER_KEY
+POST {HERMES_BASE_URL}/v1/chat/completions     # no auth header — Hermes is keyless on localhost
 { "messages": [ {role:"system",...}, {role:"user", content:"Post this alert to channel <id>: <markdown>"} ] }
 ```
 
@@ -57,7 +56,7 @@ Env (in `.env`):
 ```
 CHAT_BACKEND=hermes
 HERMES_BASE_URL=http://127.0.0.1:8642
-HERMES_API_KEY=<Hermes API_SERVER_KEY>
+HERMES_API_KEY=                       # leave blank — Hermes is keyless on localhost
 HERMES_DISCORD_CHANNEL=1509734278206984194
 ```
 
@@ -93,7 +92,7 @@ path for a reliable demo.
 
 See the ready-to-send checklist in **`docs/ask-hermes-owner.md`**. In short:
 
-1. Share **`API_SERVER_KEY`** (the bearer) so we can call `:8642`.
+1. ~~Share an API key~~ — **not needed**, Hermes is keyless on localhost. ✅
 2. **Add `POST /discord/send {channel, content}`** to the gateway — posts `content` **verbatim**
    via the existing `DiscordAdapter.send()` (no LLM). ~30 lines. **This is the big one** — it does
    not exist yet, and the agent-chat path is too non-deterministic for a live alert.

@@ -15,9 +15,10 @@ def get_inference_adapter() -> InferenceAdapter:
 
 
 def get_chat_adapter() -> ChatAdapter:
-    # 'hermes' = hand off to the teammate's bot (the real path); 'discord' = raw webhook
-    # fallback; anything else (incl. missing config) stays on the safe mock preview.
-    if config.CHAT_BACKEND == "hermes" and config.HERMES_API_KEY:
+    # 'hermes' = hand off to the teammate's bot (the real path) — no API key required since
+    # Hermes runs locally on the box; 'discord' = raw webhook fallback; anything else (incl.
+    # missing config) stays on the safe mock preview.
+    if config.CHAT_BACKEND == "hermes":
         return HermesChatAdapter()
     if config.CHAT_BACKEND == "discord" and config.DISCORD_WEBHOOK_URL:
         return DiscordChatAdapter()

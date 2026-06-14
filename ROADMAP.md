@@ -157,13 +157,15 @@ _Messaging (hand off to teammate's Hermes — `:8642`, owns Discord bot):_
 - [x] Docs corrected: our backend = Lead Analyzer, NOT Hermes; `docs/hermes-integration.md` + ask doc
 - [x] **CONFIRMED on the GB10 box:** Hermes gateway is running, `GET /health` → 200
       (`hermes-agent v0.16.0`), Discord platform = connected, bot owns channel
-      `1509734278206984194` (#general, guild "AGENT"). `API_SERVER_KEY` bearer is set in
-      `~/.hermes/.env`.
+      `1509734278206984194` (#general, guild "AGENT"). Runs **locally and keyless** — no bearer
+      needed to call `:8642`.
 - [ ] **GAP — the deterministic Discord-send endpoint does NOT exist in Hermes yet.** Today the
       only verbatim-send path is the in-process `send_message_tool` / `DiscordAdapter.send()`
       (Python, not HTTP). The HTTP API (`:8642`) is agent-chat only. ⇒ **we must add it** (Phase 5).
-- [ ] **BLOCKED on teammate:** get `HERMES_API_KEY` value; co-locate our backend on the GB10
-      (or tunnel `:8642`); confirm `1509734278206984194` is the staff-watched channel
+- [x] Confirmed: Hermes is **keyless** on localhost — no `HERMES_API_KEY` needed (adapter sends a
+      bearer only if one is set). Code updated to select `hermes` on `CHAT_BACKEND` alone.
+- [ ] **BLOCKED on teammate:** add the deterministic `POST /discord/send` endpoint (below); co-locate
+      our backend on the GB10 (`:8090`); confirm `1509734278206984194` is the staff-watched channel
 - [ ] End-to-end: `CHAT_BACKEND=hermes` → real alert appears in Discord #front-desk
 - [ ] (stretch) PersonaPlex recorded voice → transcript
 
@@ -184,15 +186,14 @@ _Reasoning path (point at the model that's actually running):_
       fall back to `lifeos-qwen3-30b:latest` for the demo.
 
 _Messaging path (build the deterministic seam — this is the one real piece of new code on the GB10/Hermes side):_
-- [ ] **Add `POST /discord/send` to Hermes** (gateway api_server): bearer-authed (`API_SERVER_KEY`),
-      body `{ "channel": "<id>", "content": "<verbatim markdown>" }` → calls `DiscordAdapter.send()`
+- [ ] **Add `POST /discord/send` to Hermes** (gateway api_server): keyless on localhost like the
+      rest of Hermes, body `{ "channel": "<id>", "content": "<verbatim markdown>" }` → `DiscordAdapter.send()`
       directly (no LLM), returns `{ "sent": true, "message_id": "..." }`. ~30 lines wrapping the
       existing in-process send. This is on the Hermes-owner side of the repo, not this one.
 - [ ] Swap `HermesChatAdapter.send()` to POST `/discord/send` instead of `/v1/chat/completions`
       (verbatim, deterministic). Keep the chat-completions LLM-relay as the documented fallback.
-- [ ] Put the real `HERMES_API_KEY` in backend `.env` (never commit). Set
-      `CHAT_BACKEND=hermes`, `HERMES_BASE_URL=http://127.0.0.1:8642`,
-      `HERMES_DISCORD_CHANNEL=1509734278206984194`.
+- [ ] Set `CHAT_BACKEND=hermes`, `HERMES_BASE_URL=http://127.0.0.1:8642`,
+      `HERMES_DISCORD_CHANNEL=1509734278206984194` (leave `HERMES_API_KEY` blank — keyless).
 
 _Co-location & wiring (Hermes binds 127.0.0.1, so the backend must live on this box):_
 - [ ] Run our FastAPI backend **on the GB10** so Nemotron (`:11434`) and Hermes (`:8642`) are both localhost.

@@ -49,8 +49,9 @@ class HermesChatAdapter(ChatAdapter):
     """Hand the alert to the teammate's Hermes service, which owns the Discord bot.
 
     PROVISIONAL CONTRACT: built against Hermes' CONFIRMED endpoint
-    `POST {HERMES_BASE_URL}/v1/chat/completions` (bearer = HERMES_API_KEY). We ask the
-    Hermes agent to post the pre-formatted alert to the staff channel.
+    `POST {HERMES_BASE_URL}/v1/chat/completions`. Hermes runs LOCALLY on the box and needs
+    no API key, so the bearer header is only sent if HERMES_API_KEY happens to be set. We ask
+    the Hermes agent to post the pre-formatted alert to the staff channel.
 
     ⚠️ This routes a fixed message through an LLM agent, which is non-deterministic. The
     PREFERRED path is a thin, deterministic Hermes endpoint (e.g. POST /discord/send
@@ -70,7 +71,10 @@ class HermesChatAdapter(ChatAdapter):
                 {"role": "user", "content": instruction},
             ],
         }
-        headers = {"Authorization": f"Bearer {config.HERMES_API_KEY}", "Content-Type": "application/json"}
+        # Hermes is local + keyless; only attach a bearer if one was explicitly configured.
+        headers = {"Content-Type": "application/json"}
+        if config.HERMES_API_KEY:
+            headers["Authorization"] = f"Bearer {config.HERMES_API_KEY}"
         # Fail fast if Hermes is unreachable (4s connect) so the dashboard never freezes;
         # allow a little read room (12s) for the agent to relay. Same stance as nemotron.py.
         timeout = httpx.Timeout(connect=4.0, read=12.0, write=5.0, pool=5.0)

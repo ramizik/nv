@@ -38,11 +38,12 @@ NEMOTRON_TIMEOUT_READ = float(os.getenv("NEMOTRON_TIMEOUT_READ", "90"))
 
 # Hermes — the teammate's RUNNING service on the GB10 box. OpenAI-compatible agent
 # gateway at :8642 that OWNS Discord (bot), memory, and tasks. We hand a finished
-# LeadAnalysis off to it for the staff alert. HERMES_API_KEY = Hermes' API_SERVER_KEY.
-# Cross-host note: Hermes binds 127.0.0.1, so this only works if our backend runs ON
-# the GB10 box (recommended) or through an SSH tunnel. See docs/hermes-integration.md.
+# LeadAnalysis off to it for the staff alert. Hermes runs LOCALLY and needs NO API key —
+# HERMES_API_KEY is optional (only sent as a bearer if you set it). Cross-host note: Hermes
+# binds 127.0.0.1, so this only works if our backend runs ON the GB10 box (recommended) or
+# through an SSH tunnel. See docs/hermes-integration.md.
 HERMES_BASE_URL = os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642")
-HERMES_API_KEY = os.getenv("HERMES_API_KEY", "")
+HERMES_API_KEY = os.getenv("HERMES_API_KEY", "")  # optional — Hermes is keyless on localhost
 HERMES_DISCORD_CHANNEL = os.getenv("HERMES_DISCORD_CHANNEL", "1509734278206984194")
 
 # Secondary standalone path only (NOT the bot Hermes owns) — raw Discord webhook.

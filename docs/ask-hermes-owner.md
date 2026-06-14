@@ -5,11 +5,9 @@
 > to deliver the staff alert to Discord — you already own that bot, so I won't rebuild it. Here's
 > exactly what I need from you. None of this requires you to touch scoring or the dashboard.
 
-## 1. Give me the Hermes API key (bearer)
-- **What:** the value of `API_SERVER_KEY` from `~/.hermes/.env` (the bearer for `:8642`).
-- **Why:** without it every call to `/v1/chat/completions` is 401 and my alert silently falls
-  back to a preview-only panel.
-- I'll put it in my `.env` as `HERMES_API_KEY=` — I will **not** commit it.
+## 1. Hermes API key — not needed ✅
+- Confirmed: Hermes runs locally on the box and is **keyless**, so I don't need `API_SERVER_KEY`.
+  My adapter only sends a bearer if one is set, and leaves it blank otherwise. Nothing to do here.
 
 ## 2. Expose a DETERMINISTIC Discord-send endpoint  ← the important one (confirmed missing)
 - **What:** a thin endpoint that posts a message verbatim via your bot, no LLM in the loop. Ideal:
