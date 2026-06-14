@@ -11,11 +11,16 @@ Define once, render everywhere.
 | Layer | Tech | Responsibility |
 |-------|------|----------------|
 | Voice | PersonaPlex (or transcript fixture) | Natural intake; emits transcript turns |
-| Orchestrator (Hermes) | FastAPI (`backend/app`) | Sequences extract→score→context→notify; assembles `LeadAnalysis`; in-memory store |
-| Reasoning | Nemotron on GB10 (or mock heuristic) | Extraction, lead scoring, next-best-action |
+| Lead Analyzer (ours) | FastAPI (`backend/app`) | Sequences extract→score→context→notify; assembles `LeadAnalysis`; in-memory store |
+| Reasoning | **Local** Nemotron model server on GB10 (or mock heuristic) | Extraction, lead scoring, next-best-action — called directly to stay on-box |
 | Clinic context | flat JSON (`shared/clinic_context/brightsmile.json`) | Services, hours, financing, premium-lead rules |
-| Chat | Discord webhook (or mock preview) | Staff alert with score + next action |
+| Messaging / tasks | **Hermes** (teammate's service, `:8642`) | Owns the Discord bot + channel; we hand off the finished alert to it |
 | Dashboard | React + Vite + TS (`frontend/`) | Observability: 9 operator panels |
+
+> **Hermes is NOT our backend.** Earlier drafts labeled `backend/app` "Hermes" — that was
+> wrong. Hermes is the teammate's separate running service (OpenAI-compatible agent gateway
+> on `:8642`, Discord bot, memory, tasks). Our service is the **Lead Analyzer**; it reasons
+> locally and hands `LeadAnalysis` to Hermes for the alert. See `docs/hermes-integration.md`.
 
 ## Data flow
 
@@ -40,15 +45,31 @@ Orchestration lives in `backend/app/services/analyze.py`. Adapters resolved by
      mock on any error.
 2. **`ChatAdapter`** (`adapters/base.py`)
    - `MockChatAdapter` — returns alert markdown as a preview.
-   - `DiscordChatAdapter` — POSTs to a Discord webhook; never raises on failure.
+   - `HermesChatAdapter` — hands the alert to Hermes (`:8642`), which relays it via its
+     Discord bot. The real path. Never raises; degrades to preview.
+   - `DiscordChatAdapter` — secondary fallback: raw Discord webhook (no bot).
+
+## Hermes integration (the seam)
+- **We do reasoning; Hermes does messaging.** Our Lead Analyzer scores the lead by calling
+  the **local** Nemotron model server directly (keeps inference on-box). It then hands the
+  finished `LeadAnalysis` to Hermes, which owns the Discord bot + channel `1509734278206984194`.
+- **Why not route reasoning through Hermes?** Hermes' default model is **cloud Gemini** (plus
+  a cloud NVIDIA NIM delegate). Routing scoring through it would send patient conversations
+  off-box and break the on-prem guarantee. So scoring bypasses Hermes by design.
+- **Cross-host:** Hermes binds `127.0.0.1:8642`. Our backend reaches it only if it runs **on
+  the GB10 box** (recommended topology) or via an SSH tunnel. Full detail + the teammate's
+  required changes: `docs/hermes-integration.md`.
 
 ## Reliability stance
 Stability > completeness. Defaults are all-mock and single-machine. Every external call
-(GB10, Discord) degrades to mock so the dashboard always renders. Voice is a fixture by
-default — live audio is never on the demo critical path.
+(Nemotron, Hermes) degrades to mock/preview so the dashboard always renders. Voice is a
+fixture by default — live audio is never on the demo critical path.
 
 ## Dual-machine model
 - **Windows dev machine:** frontend + backend dev, all-mock demo.
 - **Remote NVIDIA (GB10) Linux box:** serves Nemotron via an OpenAI-compatible endpoint
-  (`inference/remote/`). Backend points at it with `INFERENCE_BACKEND=nemotron` +
-  `NEMOTRON_BASE_URL`. `shared/` is the cross-machine source of truth, pulled on both.
+  (`inference/remote/`) **and** runs Hermes (`:8642`). For the live demo, run our backend
+  **on the GB10** so it reaches both the model server and Hermes over localhost. Backend
+  points at the model with `INFERENCE_BACKEND=nemotron` + `NEMOTRON_BASE_URL`, and at Hermes
+  with `CHAT_BACKEND=hermes` + `HERMES_API_KEY`. `shared/` is the cross-machine source of
+  truth, pulled on both.

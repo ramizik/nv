@@ -66,17 +66,22 @@ flows through the whole system. Voice produces a transcript → backend enriches
 | Capability | Tech | Status |
 |------------|------|--------|
 | Real-time / simulated voice intake | PersonaPlex (fixture default) | mock |
-| Orchestration / memory / messaging / tasks | **Hermes** = FastAPI (`backend/app`) | live |
-| Reasoning + lead scoring + next-best-action | **Nemotron** on GB10 (mock heuristic fallback) | mock→real |
-| Cheap extraction/routing (optional) | Qwen / Llama | stretch |
-| Backend API/orchestrator | Python + FastAPI | live |
-| Dashboard | React + Vite + TypeScript | building |
-| Staff notifications | **Discord** webhook (mock preview default) | mock→real |
+| **Our** lead-analysis orchestrator | **Lead Analyzer** = FastAPI (`backend/app`) | live |
+| Reasoning + lead scoring + next-best-action | **Nemotron-Super** on GB10, called *directly/locally* (mock heuristic fallback) | mock→real |
+| Cheap extraction/routing (optional) | Qwen3-30B (also on the box) | stretch |
+| Messaging / memory / tasks + Discord bot | **Hermes** = teammate's running service `:8642` (we hand off to it) | live (theirs) |
+| Dashboard | React + Vite + TypeScript | done |
+| Staff notifications | **Discord** via Hermes' bot (mock preview default) | mock→real |
+
+> ⚠️ **Correction (learned mid-build):** "Hermes" is the **teammate's** service, not our
+> backend. Our backend is the **Lead Analyzer**. We reason on the *local* Nemotron model
+> server (NOT through Hermes, whose default model is cloud Gemini) and hand the finished
+> `LeadAnalysis` to Hermes for the Discord alert. See `docs/hermes-integration.md`.
 
 ### Two swap-points (mock ↔ real, env-toggled, fail-safe)
-- `InferenceAdapter`: `mock` (rule-based scoring off clinic context) ↔ `nemotron` (GB10).
-- `ChatAdapter`: `mock` (preview) ↔ `discord` (live webhook).
-Both default to mock and **degrade to mock on any error** — the demo can never hard-fail.
+- `InferenceAdapter`: `mock` (rule-based scoring off clinic context) ↔ `nemotron` (local GB10 model server).
+- `ChatAdapter`: `mock` (preview) ↔ `hermes` (hand off to teammate's bot) ↔ `discord` (raw webhook fallback).
+Both default to mock and **degrade to mock/preview on any error** — the demo can never hard-fail.
 
 ### Observability dashboard (9 panels — operator-friendly, NO raw chain-of-thought)
 Lead Summary · Transcript · Qualification Score · Extracted Intents/Entities · Company
@@ -128,16 +133,26 @@ System Health / Model Status. (Plus the Estimated Deal Value money-shot.)
 - [ ] (optional later) polish pass: transcript auto-scroll/stream feel, micro-animations
 
 ### Phase / Layer 3 — Real integrations (target 15:30–16:40)
-**Milestone M3: GB10 Nemotron produces the score.** (Discord/Hermes owned by teammate — not ours.)
+**Milestone M3: GB10 Nemotron produces the score + alert hands off to Hermes.**
+
+_Scoring (ours — local Nemotron):_
 - [x] Nemotron adapter hardened: overlay-on-mock-skeleton, `<think>`/fence/prose-tolerant JSON
       parse, response_format retry, fail-fast connect (5s) + long read (60s), `_source` marker
+- [x] Decision: serve **Nemotron-Super** (on-brand, `detailed thinking off` toggle works as-is)
 - [x] System Health reflects real state: online (GB10 @ Xms) / degraded (fallback) / mock
 - [x] `backend/test_nemotron.py` one-shot connectivity test
-- [x] Verified fail-safe locally: unreachable box → complete object, status `degraded`, ~5s
-- [ ] **BLOCKED on values:** `NEMOTRON_BASE_URL` + served model id from the GB10 box
+- [ ] **BLOCKED on values:** `NEMOTRON_BASE_URL` + served model id (Nemotron-Super served on `/v1`)
 - [ ] Run `test_nemotron.py` against the box → confirm `_source: nemotron`
 - [ ] End-to-end: `INFERENCE_BACKEND=nemotron` → dashboard shows "GB10 Nemotron @ Xms"
-- [ ] (later) Integrate with existing Hermes: hand off LeadAnalysis instead of mock chat
+
+_Messaging (hand off to teammate's Hermes — `:8642`, owns Discord bot):_
+- [x] Learned Hermes' real shape: OpenAI-compatible gateway, bearer `API_SERVER_KEY`, Discord
+      bot + channel `1509734278206984194`, default model cloud Gemini (⇒ we keep reasoning local)
+- [x] `HermesChatAdapter` scaffolded (`CHAT_BACKEND=hermes`), fail-safe to preview
+- [x] Docs corrected: our backend = Lead Analyzer, NOT Hermes; `docs/hermes-integration.md` + ask doc
+- [ ] **BLOCKED on teammate:** `HERMES_API_KEY`; a deterministic Discord-send endpoint; co-locate
+      our backend on the GB10 (or tunnel `:8642`); confirm alert channel id
+- [ ] End-to-end: `CHAT_BACKEND=hermes` → real alert appears in Discord #front-desk
 - [ ] (stretch) PersonaPlex recorded voice → transcript
 
 ### Phase / Layer 4 — Demo hardening (target 16:40–17:40)

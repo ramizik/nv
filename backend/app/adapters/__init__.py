@@ -3,7 +3,7 @@ and never know whether they're talking to a mock or the real GB10 box."""
 from app import config
 from app.adapters.base import InferenceAdapter, ChatAdapter
 from app.adapters.mock import MockInferenceAdapter
-from app.adapters.chat import MockChatAdapter, DiscordChatAdapter
+from app.adapters.chat import MockChatAdapter, HermesChatAdapter, DiscordChatAdapter
 
 
 def get_inference_adapter() -> InferenceAdapter:
@@ -15,6 +15,10 @@ def get_inference_adapter() -> InferenceAdapter:
 
 
 def get_chat_adapter() -> ChatAdapter:
+    # 'hermes' = hand off to the teammate's bot (the real path); 'discord' = raw webhook
+    # fallback; anything else (incl. missing config) stays on the safe mock preview.
+    if config.CHAT_BACKEND == "hermes" and config.HERMES_API_KEY:
+        return HermesChatAdapter()
     if config.CHAT_BACKEND == "discord" and config.DISCORD_WEBHOOK_URL:
         return DiscordChatAdapter()
     return MockChatAdapter()

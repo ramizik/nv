@@ -1,5 +1,9 @@
-"""Orchestration — the Hermes layer. Ties voice transcript -> inference -> context ->
-chat -> assembled LeadAnalysis. This is what the /api/analyze endpoint calls.
+"""Orchestration — the Lead Analyzer service. Ties voice transcript -> inference ->
+context -> chat -> assembled LeadAnalysis. This is what the /api/analyze endpoint calls.
+
+NOTE: this is OUR service, NOT Hermes. Hermes is the teammate's separate running service
+on the GB10 (Discord bot + memory + tasks); we reason locally here and HAND OFF the
+finished LeadAnalysis to Hermes for the staff alert (CHAT_BACKEND=hermes).
 
 Flow:
   1. resolve transcript (from a known scenario fixture or the raw request)
@@ -89,12 +93,18 @@ def run_analysis(
         infer_status, infer_detail = "degraded", f"GB10 unreachable — heuristic fallback @ {infer_ms}ms"
     else:
         infer_status, infer_detail = "mock", f"local heuristic @ {infer_ms}ms"
+    chat_platform = notification.get("platform", "mock")
+    if chat_platform == "hermes":
+        chat_detail = "handed off to Hermes bot" if notification.get("sent") else "Hermes unreachable — preview only"
+    elif chat_platform == "discord":
+        chat_detail = "live webhook" if notification.get("sent") else "webhook failed — preview only"
+    else:
+        chat_detail = "preview only"
     analysis["system_status"] = [
         {"component": "PersonaPlex (voice)", "status": "mock", "detail": "transcript fixture"},
         {"component": "Nemotron (scoring)", "status": infer_status, "detail": infer_detail},
-        {"component": "Hermes (orchestration)", "status": "online", "detail": "FastAPI in-process"},
-        {"component": "Discord (alerts)", "status": notification.get("platform", "mock"),
-         "detail": "live webhook" if notification.get("platform") == "discord" and notification.get("sent") else "preview only"},
+        {"component": "Lead Analyzer (orchestration)", "status": "online", "detail": "FastAPI in-process"},
+        {"component": "Hermes / Discord (alerts)", "status": chat_platform, "detail": chat_detail},
     ]
 
     _STORE[analysis["lead_id"]] = analysis

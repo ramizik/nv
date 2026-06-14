@@ -1,8 +1,15 @@
-"""ChatAdapter implementations.
+"""ChatAdapter implementations — how the staff alert gets delivered.
 
-MockChatAdapter: builds the alert markdown and returns it as a preview (sent=False-ish
-but we mark sent=True so the timeline reads 'posted' in the all-mock demo). Zero deps.
-DiscordChatAdapter: POSTs the same markdown to a Discord webhook (just a URL — no bot).
+The REAL production path is `HermesChatAdapter`: Hermes (the teammate's running
+service on the GB10) OWNS the Discord bot + channel, so we hand the alert off to it
+rather than posting Discord ourselves. We never duplicate Hermes' Discord wiring.
+
+  MockChatAdapter   : returns the alert markdown as a preview (sent=True so the demo
+                      timeline reads 'posted'). Zero deps — the default.
+  HermesChatAdapter : POSTs the alert to Hermes' OpenAI-compatible gateway (:8642) so
+                      Hermes' bot relays it to #front-desk. Fail-safe to preview.
+  DiscordChatAdapter: secondary/standalone fallback — raw Discord webhook (no bot).
+                      Use only if Hermes is unavailable and you own a webhook URL.
 """
 from typing import Any, Dict
 
@@ -36,6 +43,44 @@ def build_alert_markdown(analysis: Dict[str, Any]) -> str:
 class MockChatAdapter(ChatAdapter):
     def send(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
         return {"platform": "mock", "sent": True, "preview_markdown": build_alert_markdown(analysis)}
+
+
+class HermesChatAdapter(ChatAdapter):
+    """Hand the alert to the teammate's Hermes service, which owns the Discord bot.
+
+    PROVISIONAL CONTRACT: built against Hermes' CONFIRMED endpoint
+    `POST {HERMES_BASE_URL}/v1/chat/completions` (bearer = HERMES_API_KEY). We ask the
+    Hermes agent to post the pre-formatted alert to the staff channel.
+
+    ⚠️ This routes a fixed message through an LLM agent, which is non-deterministic. The
+    PREFERRED path is a thin, deterministic Hermes endpoint (e.g. POST /discord/send
+    {channel, content}) — once the teammate exposes it, swap the body below to call it.
+    See docs/hermes-integration.md. Either way: never raises; degrades to preview.
+    """
+
+    def send(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        md = build_alert_markdown(analysis)
+        instruction = (
+            f"Post the following lead alert verbatim to Discord channel "
+            f"{config.HERMES_DISCORD_CHANNEL}. Do not summarize or add commentary.\n\n{md}"
+        )
+        payload = {
+            "messages": [
+                {"role": "system", "content": "You relay pre-formatted staff alerts to Discord exactly as given."},
+                {"role": "user", "content": instruction},
+            ],
+        }
+        headers = {"Authorization": f"Bearer {config.HERMES_API_KEY}", "Content-Type": "application/json"}
+        # Fail fast if Hermes is unreachable (4s connect) so the dashboard never freezes;
+        # allow a little read room (12s) for the agent to relay. Same stance as nemotron.py.
+        timeout = httpx.Timeout(connect=4.0, read=12.0, write=5.0, pool=5.0)
+        try:
+            resp = httpx.post(f"{config.HERMES_BASE_URL}/v1/chat/completions",
+                              json=payload, headers=headers, timeout=timeout)
+            resp.raise_for_status()
+            return {"platform": "hermes", "sent": True, "preview_markdown": md}
+        except Exception as e:  # never let a chat failure break the demo
+            return {"platform": "hermes", "sent": False, "preview_markdown": md, "error": str(e)}
 
 
 class DiscordChatAdapter(ChatAdapter):

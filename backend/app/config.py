@@ -20,14 +20,27 @@ GOLDEN_OUTPUTS_DIR = REPO_ROOT / "inference" / "local" / "sample_outputs"
 
 # 'mock' | 'nemotron'  — mock is the safe default for the demo
 INFERENCE_BACKEND = os.getenv("INFERENCE_BACKEND", "mock").lower()
-# 'mock' | 'discord'
+# 'mock' | 'hermes' | 'discord'  — how the staff alert is delivered
 CHAT_BACKEND = os.getenv("CHAT_BACKEND", "mock").lower()
 
-# Remote GB10 box — only used when INFERENCE_BACKEND=nemotron
+# Local GB10 model server (vLLM/NIM serving Nemotron-Super) — used when
+# INFERENCE_BACKEND=nemotron. We call this DIRECTLY, NOT through Hermes: Hermes'
+# own default model is cloud Gemini, and routing reasoning through it would send
+# patient conversations off-box and break our "nothing leaves the building" claim.
 NEMOTRON_BASE_URL = os.getenv("NEMOTRON_BASE_URL", "http://localhost:8000/v1")
 NEMOTRON_MODEL = os.getenv("NEMOTRON_MODEL", "nvidia/nemotron")
 NEMOTRON_API_KEY = os.getenv("NEMOTRON_API_KEY", "not-needed")
 
+# Hermes — the teammate's RUNNING service on the GB10 box. OpenAI-compatible agent
+# gateway at :8642 that OWNS Discord (bot), memory, and tasks. We hand a finished
+# LeadAnalysis off to it for the staff alert. HERMES_API_KEY = Hermes' API_SERVER_KEY.
+# Cross-host note: Hermes binds 127.0.0.1, so this only works if our backend runs ON
+# the GB10 box (recommended) or through an SSH tunnel. See docs/hermes-integration.md.
+HERMES_BASE_URL = os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642")
+HERMES_API_KEY = os.getenv("HERMES_API_KEY", "")
+HERMES_DISCORD_CHANNEL = os.getenv("HERMES_DISCORD_CHANNEL", "1509734278206984194")
+
+# Secondary standalone path only (NOT the bot Hermes owns) — raw Discord webhook.
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")

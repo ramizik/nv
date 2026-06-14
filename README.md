@@ -35,16 +35,22 @@ surfaces** (chat alert, drafted message, callback task) → render the decision 
 ## Architecture (one glance)
 
 ```
-[Voice transcript]──▶ FastAPI orchestrator (Hermes) ──▶ LeadAnalysis JSON ──┬──▶ React dashboard
-  PersonaPlex/fixture     │ InferenceAdapter: mock │ nemotron→GB10           └──▶ ChatAdapter: mock │ discord
-                          └ clinic_context.json (BrightSmile rules)
+[Voice transcript]──▶ Lead Analyzer (FastAPI) ──▶ LeadAnalysis JSON ──┬──▶ React dashboard
+  PersonaPlex/fixture   │ InferenceAdapter: mock │ nemotron            └──▶ ChatAdapter: mock │ hermes
+                        │   └▶ LOCAL Nemotron model server on GB10          └▶ Hermes (teammate's
+                        └ clinic_context.json (BrightSmile rules)              bot) → Discord #front-desk
 ```
 
 The entire system flows **one canonical object — `LeadAnalysis`**
 (`shared/schemas/lead_analysis.schema.json`). Two swap-points behind interfaces —
 `InferenceAdapter` and `ChatAdapter` — both **default to mock**, so the demo runs 100% on
-one machine with zero external deps. Flip **one env var** to use the real GB10 / Discord;
-both **degrade to mock on error** so the demo can't hard-fail. Details: `ARCHITECTURE.md`.
+one machine with zero external deps. Flip **one env var** to use the real GB10 / Hermes;
+both **degrade to mock on error** so the demo can't hard-fail.
+
+**Reasoning runs on the LOCAL Nemotron model server, never through Hermes** — Hermes' own
+default model is cloud Gemini, so routing scoring through it would send patient
+conversations off-box. We reason locally and only hand the *finished* alert to Hermes (which
+owns the Discord bot). Details: `ARCHITECTURE.md` · `docs/hermes-integration.md`.
 
 ## Repo layout
 
@@ -87,8 +93,12 @@ Windows: `scripts/windows/*.ps1` + `docs/setup-windows.md`. GB10 wiring: `docs/s
 
 | Switch | Env vars |
 |--------|----------|
-| Real local inference on GB10 | `INFERENCE_BACKEND=nemotron` · `NEMOTRON_BASE_URL=http://<gb10>:8000/v1` |
-| Real Discord staff alert | `CHAT_BACKEND=discord` · `DISCORD_WEBHOOK_URL=...` |
+| Real local inference on GB10 | `INFERENCE_BACKEND=nemotron` · `NEMOTRON_BASE_URL=http://<gb10>:8000/v1` · `NEMOTRON_MODEL=<id from /v1/models>` |
+| Real staff alert via Hermes bot | `CHAT_BACKEND=hermes` · `HERMES_API_KEY=<Hermes API_SERVER_KEY>` (backend must run on the GB10 box or tunnel `:8642`) |
+| Raw Discord webhook (fallback) | `CHAT_BACKEND=discord` · `DISCORD_WEBHOOK_URL=...` |
+
+> Hermes (the teammate's service) owns Discord and binds `127.0.0.1:8642`. See
+> `docs/hermes-integration.md` for the seam, topology, and what the Hermes owner must expose.
 
 ## API (full contract in `docs/integration-plan.md`)
 
@@ -101,4 +111,6 @@ Windows: `scripts/windows/*.ps1` + `docs/setup-windows.md`. GB10 wiring: `docs/s
 
 ## Docs map
 `ROADMAP.md` (full project reference + phases) · `ARCHITECTURE.md` · `DEMO_SCRIPT.md` ·
-`docs/judging-story.md` · `docs/integration-plan.md` · `docs/setup-windows.md` · `docs/setup-remote-nvidia.md`
+`docs/judging-story.md` · `docs/integration-plan.md` (FE↔BE API) ·
+**`docs/hermes-integration.md`** (the Hermes seam) · `docs/ask-hermes-owner.md` (teammate checklist) ·
+`docs/setup-windows.md` · `docs/setup-remote-nvidia.md`
