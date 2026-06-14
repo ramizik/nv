@@ -58,7 +58,33 @@ Hermes → Qwen**, on-box — nothing leaves the building.
 asking you to pre-warm it. Qwen3-30B is the default reasoning path. If you ever swap the
 resident model, just tell me — I won't touch it.
 
-## 5. Security hygiene (you flagged it — flagging back)
+## 5. Voice (ASR/TTS) + embeddings — how should I reach the NIM models?  ← need a decision
+
+I want the full local fleet in play, not just reasoning: **ASR** (nemotron-asr-streaming /
+parakeet-0.6b-tdt) to turn the caller's audio into the transcript, **TTS** (magpie) for Ava's
+side, and **embeddings** (llama-nemotron-embed-1b-v2) for semantic clinic-context retrieval.
+
+**What I found on the box (so we don't guess):**
+- `GET :8642/v1/models` returns **only `hermes-agent`** — i.e. Hermes is a *chat-completions
+  agent gateway*, it does **not** currently proxy embeddings or voice. There's no
+  `/v1/embeddings`, no ASR/TTS route on `:8642`.
+- The NIM containers ARE up and reachable **directly**: embed `nvidia/llama-nemotron-embed-1b-v2`
+  at **:8001** (OpenAI-style `/v1/models` works), TTS at **:8003** (custom/gRPC, not `/v1`).
+  ASR isn't listening yet (still pulling).
+
+So "everything through Hermes" can't cover voice/embed as-is. **Which do you want?**
+  1. **I call the NIM containers directly** (on-box localhost — `:8001` embed, `:8003` TTS, ASR
+     port TBD). These aren't LLM reasoning, so direct on-box calls don't weaken the on-prem
+     pitch. Fastest path; no work for you. ← my default unless you object.
+  2. **You add proxy routes on Hermes** for embeddings/ASR/TTS so I have a single integration
+     point. Cleaner, but it's real work on your side and Hermes isn't built for it today.
+  3. **Leave voice/embed mock** for the demo (transcript stays a fixture, context-match stays
+     keyword-based) and only ship reasoning-via-Hermes.
+
+Tell me 1/2/3 and (if 1) confirm the ASR container's port + API once it's running. Until you
+answer, I'm keeping voice/embed on the safe mock path.
+
+## 6. Security hygiene (you flagged it — flagging back)
 
 - `~/.hermes/gateway_state.json` has a **live Telegram token** in an error string. Please scrub +
 rotate it, and don't attach that file to anything. Not mine to touch.

@@ -69,7 +69,7 @@ def run_analysis(
     ]
 
     # chat notification
-    notification = {"platform": config.CHAT_BACKEND, "sent": False, "preview_markdown": ""}
+    notification = {"platform": config.CHAT_BACKEND, "sent": False, "preview_markdown": "", "skipped": not notify}
     if notify:
         notification = get_chat_adapter().send(analysis)
         actions.append({
@@ -85,7 +85,7 @@ def run_analysis(
     analysis["actions"] = actions
 
     # system status — _source is set by the inference adapter:
-    #   'hermes' (Hermes delegated to local Qwen) | 'qwen' (direct Ollama) | 'mock_fallback'
+    #   'qwen' (direct local Ollama) | 'hermes' (Hermes configured provider) | 'mock_fallback'
     source = analysis.pop("_source", None)
     real_backends = ("hermes", "qwen", "nemotron")
     if config.INFERENCE_BACKEND in real_backends and source in ("hermes", "qwen"):
@@ -96,15 +96,19 @@ def run_analysis(
     else:
         infer_status, infer_detail = "mock", f"local heuristic @ {infer_ms}ms"
     chat_platform = notification.get("platform", "mock")
-    if chat_platform == "hermes":
+    if notification.get("skipped"):
+        chat_detail = "notification skipped by request"
+    elif chat_platform == "hermes":
         chat_detail = "handed off to Hermes bot" if notification.get("sent") else "Hermes unreachable — preview only"
     elif chat_platform == "discord":
         chat_detail = "live webhook" if notification.get("sent") else "webhook failed — preview only"
     else:
         chat_detail = "preview only"
     analysis["system_status"] = [
-        {"component": "PersonaPlex (voice)", "status": "mock", "detail": "transcript fixture"},
-        {"component": "Qwen via Hermes (scoring)", "status": infer_status, "detail": infer_detail},
+        {"component": "ASR (voice in)", "status": "blocked", "detail": config.ASR_RUNTIME_STATUS},
+        {"component": "Qwen3-30B (scoring)", "status": infer_status, "detail": infer_detail},
+        {"component": "Embeddings (memory)", "status": "available", "detail": f"{config.EMBED_MODEL} @ {config.EMBED_BASE_URL}"},
+        {"component": "TTS (voice out)", "status": "available", "detail": f"{config.TTS_VOICE} @ {config.TTS_BASE_URL}"},
         {"component": "Lead Analyzer (orchestration)", "status": "online", "detail": "FastAPI in-process"},
         {"component": "Hermes / Discord (alerts)", "status": chat_platform, "detail": chat_detail},
     ]

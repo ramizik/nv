@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Remote NVIDIA GB10: warm the local Qwen3-30B model on Ollama (:11434/v1, OpenAI-compatible).
+# Remote NVIDIA GB10: warm local Qwen3-30B on Ollama (:11434/v1, OpenAI-compatible).
 #
 # NOTE: this is the DIRECT-OLLAMA *FALLBACK* warmer. The real demo path routes reasoning
-# through Hermes (http://127.0.0.1:8642/v1), which itself delegates to this same local
-# Qwen3-30B on Ollama — so for the normal demo you do NOT need to run this script (Hermes
-# already serves Qwen). Use it only when driving Ollama directly with INFERENCE_BACKEND=qwen:
+# directly with INFERENCE_BACKEND=qwen:
 #   INFERENCE_BACKEND=qwen
 #   QWEN_BASE_URL=http://127.0.0.1:11434/v1
-#   QWEN_MODEL=Qwen3-30B:latest
+#   QWEN_MODEL=lifeos-qwen3-30b:latest
 #   QWEN_API_KEY=not-needed
 #
 # ⚠️ ~120 GB unified memory ⇒ ONLY ONE large model resident at a time. Qwen3-30B (~18 GB,
@@ -15,14 +13,15 @@
 # optional heavier alternative that monopolizes the box. Switching models = unload+reload.
 set -euo pipefail
 
-MODEL="${MODEL:-Qwen3-30B:latest}"
+MODEL="${MODEL:-lifeos-qwen3-30b:latest}"
+OLLAMA_BIN="${OLLAMA_BIN:-/home/dell/ollama-dist/bin/ollama}"
 
 # Ollama usually runs as a service already; start it if not, then warm the model so the first
 # real request isn't a cold load.
 echo "Ensuring Ollama is up and warming $MODEL ..."
-pgrep -x ollama >/dev/null 2>&1 || (ollama serve >/tmp/ollama.log 2>&1 &) && sleep 2
-ollama run "$MODEL" "Reply with the single word: ok" || {
-  echo "Failed to warm $MODEL. Is it pulled?  ollama list"; exit 1; }
+pgrep -x ollama >/dev/null 2>&1 || ("$OLLAMA_BIN" serve >/tmp/ollama.log 2>&1 &) && sleep 2
+"$OLLAMA_BIN" run "$MODEL" "Reply with the single word: ok" || {
+  echo "Failed to warm $MODEL. Is it pulled?  $OLLAMA_BIN list"; exit 1; }
 echo "Ready. OpenAI-compatible endpoint: http://127.0.0.1:11434/v1  (model: $MODEL)"
 
 # ---------------------------------------------------------------------------

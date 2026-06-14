@@ -1,39 +1,61 @@
 # inference/
 
-Everything about the reasoning layer and how to swap mock ↔ real local inference.
+Everything about model runtime, mock-vs-real inference, and GB10 smoke tests.
 
 ## Layout
-- `local/mock_inference.py` — CLI to run the mock analysis on a transcript fixture (no server).
-- `local/sample_inputs/`, `local/sample_outputs/` — fixtures (golden veneers output lives here).
-- `remote/` — scripts for the **DIRECT-OLLAMA fallback** path on the **GB10 NVIDIA box**
-  (the real demo path needs no model server — see "Mock vs real" below):
-  - `start_qwen.sh` — ensure/​warm the **Qwen3-30B** model on **Ollama** (`:11434/v1`,
-    OpenAI-compatible) for the direct fallback. vLLM `:8000` documented as an alternative.
-  - `run_model_server.sh` — stable entry point delegating to the above.
-  - `start_personaplex.sh` — voice service placeholder (stretch).
-  - `healthcheck.sh` — verify GPU + `/v1/models` + a tiny completion (direct path).
 
-> ⚠️ **~120 GB unified memory ⇒ only ONE large model resident at a time.** Qwen3-30B
-> (~18 GB, ~3B active) is fast, stays resident, and coexists with the NIM voice stack.
-> Nemotron-120B (~82 GB) is an optional heavier alternative that monopolizes the box.
+- `local/mock_inference.py` — run the heuristic analysis on a transcript fixture.
+- `local/sample_inputs/`, `local/sample_outputs/` — fixtures and golden outputs.
+- `remote/start_qwen.sh` — warm `lifeos-qwen3-30b:latest` on Ollama.
+- `remote/healthcheck.sh` — verify Qwen, Hermes, embedding NIM, and TTS NIM.
+- `remote/run_model_server.sh` — stable entry point delegating to `start_qwen.sh`.
 
-## Mock vs real
-The backend picks the adapter from `.env` (adapters live in `backend/app/adapters/inference.py`):
-- `INFERENCE_BACKEND=mock` (default) → rule-based mock (zero deps).
-- `INFERENCE_BACKEND=hermes` (**the real demo path**) → `HermesInferenceAdapter` → calls
-  Hermes (`HERMES_BASE_URL`, default `http://127.0.0.1:8642`), which delegates to its local
-  default model **Qwen3-30B** on the GB10. Inference stays on-box; **we run no model server**.
-- `INFERENCE_BACKEND=qwen` (optional fallback; legacy alias `nemotron`) → `QwenInferenceAdapter`
-  → talks **directly** to Ollama (`QWEN_BASE_URL`, default `http://127.0.0.1:11434/v1`).
+## Current GB10 Profile
 
-Both adapters ask for the **same partial-`LeadAnalysis` JSON** the mock returns, so nothing
-upstream changes. On any error they **fall back to mock** — a flaky model never breaks the
-demo. Connectivity test: `backend/test_hermes_inference.py`. Full GB10 setup:
-`../docs/setup-remote-nvidia.md`.
+The app's main/default conversational brain is direct local Qwen:
 
-## Quick local check (no server)
-Uses the backend deps, so run it with the backend venv's Python:
+```env
+INFERENCE_BACKEND=qwen
+QWEN_BASE_URL=http://127.0.0.1:11434/v1
+QWEN_MODEL=lifeos-qwen3-30b:latest
+```
+
+Hermes is still the agent/tool/alert gateway:
+
+```env
+CHAT_BACKEND=hermes
+HERMES_BASE_URL=http://127.0.0.1:8642
+```
+
+NIM sidecars:
+
+```env
+EMBED_BASE_URL=http://127.0.0.1:8001/v1
+EMBED_MODEL=nvidia/llama-nemotron-embed-1b-v2
+TTS_BASE_URL=http://127.0.0.1:8003/v1
+```
+
+## Known Blockers
+
+- `nemotron-asr-streaming` image is downloaded, but runtime model artifacts need
+  `NGC_API_KEY` inside the container. Until then, ASR is blocked.
+- `parakeet-0.6b-tdt` image exists locally but is `linux/amd64`; the GB10 host
+  is `linux/arm64`, so it exits with `exec format error`.
+- The 120B GGUF model is a deep-planning profile, not part of the normal hot path.
+
+## Checks
+
 ```bash
-# from repo root, after backend setup (scripts/linux/setup.sh)
-./backend/.venv/bin/python inference/local/mock_inference.py shared/sample_payloads/veneers_wedding.json
+inference/remote/healthcheck.sh
+```
+
+```bash
+cd backend
+INFERENCE_BACKEND=qwen \
+QWEN_MODEL=lifeos-qwen3-30b:latest \
+./.venv/bin/python test_hermes_inference.py
+```
+
+```bash
+curl -fsS http://127.0.0.1:8090/api/health | python3 -m json.tool
 ```

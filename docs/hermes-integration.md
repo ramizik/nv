@@ -1,169 +1,136 @@
-# Hermes Integration — the seam between our Lead Analyzer and the teammate's Hermes
+# GB10 Hermes And Model Integration
 
-> **TL;DR of the division of labor.** **Hermes** (the teammate's running service) is now our
-> **single integration point for BOTH reasoning AND alerts**. We (the **Lead Analyzer**,
-> `backend/app`) POST the transcript to Hermes for scoring — **Hermes delegates to its local
-> default model Qwen3-30B (Ollama on the GB10)** and returns the `LeadAnalysis` JSON — then we
-> hand the finished alert back to Hermes to relay into Discord. Everything stays on-box because
-> Hermes' default model is local, not cloud. Hermes also owns the **Discord bot**, memory, and
-> tasks. This doc is the contract so neither side builds the same thing twice.
+This repo runs the **Local Voice Lead Closer** demo on the Dell Pro Max GB10 at
+`/home/dell/ram/nv`. It reuses the LifeOS/Hermes stack without importing
+OpenClaw, OpenShell, or NemoClaw.
 
----
+## Runtime Contract
 
-## 1. What Hermes actually is (confirmed from the GB10 box)
+| Concern | Runtime | Endpoint | Status |
+|---|---|---|---|
+| Main conversational/scoring brain | Qwen3-30B-A3B GGUF via Ollama | `http://127.0.0.1:11434/v1` | Primary |
+| Hermes agent/tools/actions/alerts | Hermes gateway | `http://127.0.0.1:8642` | Primary gateway |
+| Text memory embeddings | `nvidia/llama-nemotron-embed-1b-v2` NIM | `http://127.0.0.1:8001/v1` | Running |
+| Voice output | Magpie multilingual TTS NIM | `http://127.0.0.1:8003/v1` | Running |
+| Streaming ASR | `nemotron-asr-streaming` NIM | `http://127.0.0.1:8002/v1` | Blocked until NGC API key is available to the container |
+| Parakeet ASR fallback | `parakeet-0.6b-tdt` NIM | unset | Blocked: local image is `linux/amd64`, GB10 is `linux/arm64` |
 
-- A **running service** on the GB10 — **confirmed up**: `GET /health` → 200, `hermes-agent v0.16.0`,
-  bound to **`http://127.0.0.1:8642`**.
-- **Gateway auth: a bearer IS required on every route.** `_check_auth()` compares
-  `Authorization: Bearer <token>` to `API_SERVER_KEY` (set in `~/.hermes/.env`); missing/wrong →
-  `401 {"error":{"code":"invalid_api_key"}}`. The server won't even start without the key set.
-  → The "invalid api key" we saw was *this*, not a cloud-model key. (Earlier "keyless" note: wrong.)
-- **Owns Discord** via a **bot** (`DISCORD_BOT_TOKEN`) — connected; home channel
-  **`1509734278206984194`** (`DISCORD_HOME_CHANNEL`), DM allowlist (`DISCORD_ALLOWED_USERS`).
-- **CORRECTION — the default model is LOCAL, not cloud.** Verified on the box: `config.yaml`
-  `model.default: Qwen3-30B:latest`, provider `custom:lifeos-local`,
-  `base_url: http://127.0.0.1:11435/v1`, `api_key: no-key-required`. Earlier notes that claimed
-  the default was cloud **`gemini-flash-latest`** were **wrong**. Because the default model runs
-  on the GB10 (Ollama), **routing reasoning through Hermes keeps patient conversations on-box** —
-  nothing leaves the building. The model behind Hermes is **keyless**; only the gateway itself
-  requires the bearer.
-- **No `/discord/send` route exists** (every registered route enumerated: `/v1/chat/completions`,
-  `/v1/responses`, `/v1/runs`, `/api/sessions/*`, `/api/jobs/*`). BUT the deterministic verbatim
-  path we want **already exists as a platform**: the **webhook platform** (`gateway/platforms/webhook.py`)
-  in **`deliver_only: true`** mode with **`deliver: discord`** — skips the agent, routes the POST body
-  straight through the live Discord adapter to a channel (defaults to the home channel). It is just
-  **not enabled in `config.yaml` yet** (no `webhook:` platform block). Enabling it = config, not code.
-- Config lives in **`~/.hermes/.env`** + **`~/.hermes/config.yaml`**.
+## Important Correction
 
-### Why this is the architecture
-Because Hermes' default model is **local Qwen3-30B on the GB10**, routing through Hermes does
-**not** leave the box — so Hermes becomes our **single integration point for both reasoning and
-alerts**, and the "nothing leaves the building" pitch holds. So:
+Hermes is not assumed to be the local-Qwen inference brain for this repo.
+Hermes was restored to its reliable `gemini-flash-latest` default after the
+local-Qwen Hermes path proved slow and unstable with the full Hermes prompt. The
+local provider is still registered in Hermes, but this app uses direct Ollama
+for deterministic on-box Qwen inference:
 
-| Concern | Owner | How |
-|---|---|---|
-| Reasoning / lead scoring | **Hermes (local Qwen3-30B)** | POST the transcript to Hermes `/v1/chat/completions`; it delegates to its local default model and returns the `LeadAnalysis` JSON (`INFERENCE_BACKEND=hermes`) |
-| Discord alert / agent tasks | **Hermes** | we hand off the finished `LeadAnalysis` (`CHAT_BACKEND=hermes`) |
-
-Both paths require the gateway bearer (`HERMES_API_KEY = API_SERVER_KEY` from `~/.hermes/.env`);
-the model behind the gateway is keyless.
-
----
-
-## 2. How we call Hermes
-
-Two adapters, two concerns, one gateway.
-
-### 2a. Reasoning — `backend/app/adapters/inference.py`
-
-`HermesInferenceAdapter` is the **primary** inference path: it POSTs the transcript to Hermes
-`/v1/chat/completions` (bearer = `HERMES_API_KEY`), Hermes delegates to its local default model
-**Qwen3-30B** (Ollama `:11435`), and the returned JSON overlays the `LeadAnalysis` skeleton.
-`QwenInferenceAdapter` is a **direct fallback** that talks to Ollama if the gateway is
-unreachable. (The old `nemotron.py` direct-Nemotron adapter has been **removed**.) The
-connectivity smoke test is `backend/test_hermes_inference.py`.
-
-```
-INFERENCE_BACKEND=hermes
-HERMES_BASE_URL=http://127.0.0.1:8642
-HERMES_API_KEY=                       # = API_SERVER_KEY (from ~/.hermes/.env)
-HERMES_INFERENCE_MODEL=               # blank → Hermes' default (Qwen3-30B)
+```env
+INFERENCE_BACKEND=qwen
+QWEN_BASE_URL=http://127.0.0.1:11434/v1
+QWEN_MODEL=lifeos-qwen3-30b:latest
+QWEN_THINKING_DIRECTIVE=/no_think
 ```
 
-Fail-safe: any error degrades to the mock skeleton, so scoring never hard-fails the demo.
+Hermes remains the durable gateway for tool execution, memory/actions, and
+alert delivery:
 
-### 2b. Alerts — `HermesChatAdapter` (`backend/app/adapters/chat.py`)
-
-`backend/app/adapters/chat.py` supports both delivery paths; it picks the webhook when its URL is set.
-
-**PRIMARY — webhook `deliver_only` (deterministic, no LLM, on-box).** Confirmed from the gateway
-source `gateway/platforms/webhook.py`: a webhook platform route with `deliver_only: true` +
-`deliver: discord` posts the request **body verbatim** to Discord with **no LLM**. The URL is
-`POST http://<host>:<port>/webhooks/<route_name>` — and crucially it is on the **webhook
-platform's OWN port (default `8644`), NOT the gateway `8642`**. When `HERMES_WEBHOOK_URL` is set
-we POST the rendered markdown straight to that route:
-```
-POST {HERMES_WEBHOOK_URL}            # e.g. http://127.0.0.1:8644/webhooks/<route_name>
-{ "content": "<verbatim markdown alert>", "chat_id": "1509734278206984194" }
-```
-The route template `"{content}"` renders the body's **`content`** field verbatim, and
-`deliver_extra.chat_id: "{chat_id}"` lets the body's `chat_id` override the channel (else it
-falls back to the Discord home channel `1509734278206984194`). No model, never leaves the box,
-sub-second. The body field names (`content`, `chat_id`) are **co-designed with the route
-template** in `config.yaml` (see §5) — keep them matching.
-
-Auth on the webhook route: secret **`INSECURE_NO_AUTH`** is allowed on a loopback bind (the
-demo path). HMAC mode expects header **`X-Hub-Signature-256: sha256=<hex>`** (GitHub scheme) or
-**`X-Webhook-Signature: <bare hex>`** over the raw body — **the gateway does NOT recognize a
-plain `X-Signature` header** (earlier note was wrong). `HERMES_WEBHOOK_SECRET` selects the mode.
-
-**FALLBACK — `/v1/chat/completions`** (only if no webhook URL): asks the agent to post the alert.
-Requires the gateway bearer (`HERMES_API_KEY = API_SERVER_KEY`). This routes through Hermes'
-default model (local Qwen3-30B, on-box) but is non-deterministic; prefer the webhook for the
-real demo.
-
-Both are **fail-safe**: any error (unreachable, 401, timeout) degrades to the preview, so the
-dashboard's Chat Notification panel always renders.
-
-Env (in `.env`):
-```
+```env
 CHAT_BACKEND=hermes
 HERMES_BASE_URL=http://127.0.0.1:8642
-HERMES_DISCORD_CHANNEL=1509734278206984194
-HERMES_WEBHOOK_URL=                   # PRIMARY — the deliver_only route URL on port 8644 (from the owner)
-HERMES_WEBHOOK_SECRET=                # blank = INSECURE_NO_AUTH demo; else the route's HMAC secret
-HERMES_API_KEY=                       # gateway bearer (= API_SERVER_KEY) — required for reasoning + chat fallback
+HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>
 ```
 
-HMAC header (confirmed against `gateway/platforms/webhook.py`): use
-`X-Hub-Signature-256: sha256=<hex>` or `X-Webhook-Signature: <bare hex>` over the raw body — a
-plain `X-Signature` header is **not** recognized. For the demo, an `INSECURE_NO_AUTH` route
-(blank secret) sidesteps signing entirely.
+Do not commit `HERMES_API_KEY` or any token copied from `~/.hermes/.env`.
 
----
+## Backend Configuration
 
-## 3. Network topology (this is a real gotcha)
+The backend reads `.env` from the repo root. The GB10 profile is:
 
-Hermes **binds `127.0.0.1`** — it is **not reachable from another host** as-is. Two options:
+```env
+INFERENCE_BACKEND=qwen
+CHAT_BACKEND=hermes
 
-- **Recommended: co-locate.** Run our `backend/` **on the GB10 box** (the repo is pulled there
-  too). Then backend → Hermes gateway (`:8642`) and backend → Hermes webhook route (`:8644`) are
-  both `localhost`, and Hermes itself reaches its local model (Ollama `:11435`). ⚠️ **`:8080` is
-  already taken on the box — run our backend on `:8090`** (`uvicorn app.main:app --port 8090
-  --host 0.0.0.0`); point the dashboard's `VITE_API_BASE` at it.
-- **Alternative: SSH tunnel** from wherever our backend runs:
-  `ssh -L 8642:127.0.0.1:8642 -L 8644:127.0.0.1:8644 <user>@<gb10>`.
+HERMES_BASE_URL=http://127.0.0.1:8642
+HERMES_API_KEY=
+HERMES_DISCORD_CHANNEL=1509734278206984194
 
-We do **not** need Hermes to rebind to `0.0.0.0` if we co-locate. Co-location is the simplest
-path for a reliable demo.
+QWEN_BASE_URL=http://127.0.0.1:11434/v1
+QWEN_MODEL=lifeos-qwen3-30b:latest
+QWEN_API_KEY=not-needed
+QWEN_TIMEOUT_READ=240
+QWEN_THINKING_DIRECTIVE=/no_think
 
----
+EMBED_BASE_URL=http://127.0.0.1:8001/v1
+EMBED_MODEL=nvidia/llama-nemotron-embed-1b-v2
+EMBED_INPUT_TYPE_QUERY=query
 
-## 4. Security flags raised by the Hermes owner (do not ignore)
+TTS_BASE_URL=http://127.0.0.1:8003/v1
+TTS_VOICE=Magpie-Multilingual.EN-US.Mia.Neutral
+TTS_LANGUAGE=en-US
+TTS_SAMPLE_RATE_HZ=22050
 
-1. **`~/.hermes/gateway_state.json` leaks a live Telegram bot token** in an error string.
-   Anything that ships/relays that file exfiltrates a credential. **Scrub + rotate** it; never
-   attach it to a message, paste, or commit. (Not ours to fix — flagging to the owner.)
-2. **Never commit `~/.hermes/.env`** or any of the keys above. Our repo's `.gitignore` already
-   excludes `.env`; keep Hermes secrets out of this repo entirely.
+ASR_BACKEND=nemotron-asr-streaming
+ASR_BASE_URL=http://127.0.0.1:8002/v1
+```
 
----
+Port `8080` is already occupied by the LifeOS backend on the GB10. Run this app
+on port `8090`:
 
-## 5. What the Hermes owner needs to do for us (the ask)
+```bash
+PORT=8090 scripts/linux/run_backend.sh
+```
 
-See the ready-to-send checklist in **`docs/ask-hermes-owner.md`**. In short:
+## Health And Smoke Tests
 
-1. **Enable a webhook `deliver_only` route** in `~/.hermes/config.yaml` (the `webhook:` platform
-   block doesn't exist yet): `deliver: discord`, `deliver_only: true`, template `"{content}"`,
-   `deliver_extra.chat_id: "{chat_id}"`, channel defaulting to the home channel, auth
-   `INSECURE_NO_AUTH` for the demo (or an HMAC secret). Restart the gateway. **This is the one task.**
-2. Send back: the **route URL** (note it's on the **webhook port `8644`**, not the gateway `8642`),
-   the **auth mode** (`INSECURE_NO_AUTH`, or HMAC secret + which header: `X-Hub-Signature-256` /
-   `X-Webhook-Signature`), and confirm the body field is **`content`** (and `chat_id` overrides the channel).
-3. Confirm the **home channel** (`1509734278206984194`) is where staff/judges watch.
-4. Help us **co-locate** our backend on the GB10 on **`:8090`** (`:8080` is taken).
+Repo-level health:
 
-What they explicitly do **not** need to do: write a custom `/discord/send` route (the webhook
-platform already does this — just enable it); stand up a separate model for us (**Hermes' own
-default model, local Qwen3-30B via Ollama `:11435`, already serves our reasoning**); change the
-default model; or build any scoring/dashboard — we own that.
+```bash
+curl -fsS http://127.0.0.1:8090/api/health | python3 -m json.tool
+```
+
+Model/NIM stack health:
+
+```bash
+inference/remote/healthcheck.sh
+```
+
+Qwen inference path:
+
+```bash
+cd backend
+INFERENCE_BACKEND=qwen \
+QWEN_BASE_URL=http://127.0.0.1:11434/v1 \
+QWEN_MODEL=lifeos-qwen3-30b:latest \
+./.venv/bin/python test_hermes_inference.py
+```
+
+Embedding smoke:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:8001/v1/embeddings \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"nvidia/llama-nemotron-embed-1b-v2","input":["LifeOS embedding smoke test"],"input_type":"query"}'
+```
+
+TTS smoke:
+
+```bash
+curl -fsS http://127.0.0.1:8003/v1/audio/synthesize \
+  -F 'text=LifeOS TTS smoke test.' \
+  -F 'language=en-US' \
+  -F 'voice=Magpie-Multilingual.EN-US.Mia.Neutral' \
+  -F 'sample_rate_hz=22050' \
+  -F 'encoding=LINEAR_PCM' \
+  -o /tmp/lifeos-tts.wav
+```
+
+## Failure Modes
+
+- If Qwen is missing from `/v1/models`, check `lifeos-ollama.service` and warm
+  the model with `inference/remote/start_qwen.sh`.
+- If Hermes returns `401 invalid_api_key`, copy `API_SERVER_KEY` from
+  `~/.hermes/.env` into this repo's `.env` as `HERMES_API_KEY`.
+- If ASR fails with `ManifestDownloadError` or mentions missing API key, restart
+  the ASR NIM container with a valid NGC API key. Until that is fixed, this repo
+  uses transcript fixtures.
+- Do not try to run the downloaded Parakeet image on this GB10. The available
+  image is `linux/amd64`; the machine is `linux/arm64`.

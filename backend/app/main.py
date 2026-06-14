@@ -16,6 +16,7 @@ from app import config
 from app.schemas.models import AnalyzeRequest
 from app.services import analyze as svc
 from app.services.clinic import get_clinic_context
+from app.services.system_health import collect_runtime_health
 
 app = FastAPI(title="Local Voice Lead Closer", version="0.1.0")
 app.add_middleware(
@@ -34,6 +35,7 @@ def health():
         "inference_backend": config.INFERENCE_BACKEND,
         "chat_backend": config.CHAT_BACKEND,
         "discord_configured": bool(config.DISCORD_WEBHOOK_URL),
+        "runtime": collect_runtime_health(),
     }
 
 

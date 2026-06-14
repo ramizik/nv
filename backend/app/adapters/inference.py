@@ -1,11 +1,9 @@
 """Real inference adapters — turn a transcript into a LeadAnalysis.
 
-The DEMO/REAL path is `HermesInferenceAdapter`: we POST the transcript to Hermes
-(the teammate's OpenAI-compatible gateway on the GB10) and Hermes delegates the
-reasoning to its local default model — **Qwen3-30B served via Ollama on the box**.
-So inference stays on-prem (patient conversations never leave the building) AND we
-never run our own model server. `QwenInferenceAdapter` is a DIRECT-to-Ollama fallback
-for when Hermes is unavailable.
+The primary GB10 path is `QwenInferenceAdapter`: it calls the local Ollama
+OpenAI-compatible endpoint for `lifeos-qwen3-30b:latest`. Hermes remains the
+agent/action gateway, but its current stable default is Gemini, so the app does
+not assume Hermes inference is local unless explicitly configured that way.
 
 Both share one reliability strategy (so the demo can never hard-fail):
   1. Run the mock heuristic FIRST to get a COMPLETE LeadAnalysis skeleton.
@@ -16,11 +14,13 @@ Both share one reliability strategy (so the demo can never hard-fail):
   4. On ANY error, return the mock skeleton tagged `_source = mock_fallback`.
 
 Enable the real path with:
+  INFERENCE_BACKEND=qwen
+  QWEN_BASE_URL=http://127.0.0.1:11434/v1
+  QWEN_MODEL=lifeos-qwen3-30b:latest
+Or the Hermes gateway path with:
   INFERENCE_BACKEND=hermes
   HERMES_BASE_URL=http://127.0.0.1:8642
-  HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>   (the gateway bearer; the model is keyless)
-Or the direct fallback with:
-  INFERENCE_BACKEND=qwen   QWEN_BASE_URL=http://127.0.0.1:11434/v1   QWEN_MODEL=Qwen3-30B:latest
+  HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>
 """
 import json
 import re
@@ -147,7 +147,7 @@ class _OpenAICompatInferenceAdapter(InferenceAdapter):
 
 
 class HermesInferenceAdapter(_OpenAICompatInferenceAdapter):
-    """REAL path: reason via Hermes, which delegates to its local default model (Qwen3-30B)."""
+    """Gateway path: reason via Hermes' configured default provider."""
     source_label = "hermes"
 
     def _base_url(self) -> str: return f"{config.HERMES_BASE_URL}/v1"
@@ -157,7 +157,7 @@ class HermesInferenceAdapter(_OpenAICompatInferenceAdapter):
 
 
 class QwenInferenceAdapter(_OpenAICompatInferenceAdapter):
-    """FALLBACK path: call the local Ollama OpenAI endpoint directly (Hermes bypassed)."""
+    """Primary GB10 path: call local Qwen3-30B through Ollama directly."""
     source_label = "qwen"
 
     def _base_url(self) -> str: return config.QWEN_BASE_URL

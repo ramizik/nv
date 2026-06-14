@@ -12,5 +12,6 @@ else
   . .venv/bin/activate
   pip install -q -r requirements.txt
 fi
-echo "Backend on http://localhost:8080 (health: /api/health)"
-exec uvicorn app.main:app --port 8080
+PORT="${PORT:-8090}"
+echo "Backend on http://localhost:${PORT} (health: /api/health)"
+exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT"

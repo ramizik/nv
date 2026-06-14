@@ -9,7 +9,7 @@ rather than posting Discord ourselves. We never duplicate Hermes' Discord wiring
   HermesChatAdapter : delivers the alert via Hermes. PRIMARY = the webhook platform in
                       `deliver_only` mode (deliver: discord) — no LLM, on-box, verbatim,
                       sub-second. FALLBACK = POST /v1/chat/completions (needs the gateway
-                      bearer; routes through the cloud agent model). Fail-safe to preview.
+                      bearer; routes through Hermes' configured agent model). Fail-safe to preview.
   DiscordChatAdapter: secondary/standalone fallback — raw Discord webhook (no bot).
                       Use only if Hermes is unavailable and you own a webhook URL.
 """
@@ -63,10 +63,9 @@ class HermesChatAdapter(ChatAdapter):
     on-box, deterministic, sub-second — exactly what a live demo needs. Optional per-route HMAC
     (HERMES_WEBHOOK_SECRET); blank = INSECURE_NO_AUTH demo mode.
 
-    FALLBACK — POST /v1/chat/completions. Routes through Hermes' agent + its local default
-    model (Qwen3-30B on the GB10 — on-box, NOT cloud) and REQUIRES the gateway bearer
-    (HERMES_API_KEY = API_SERVER_KEY). Still on-prem, but LLM-mediated so non-deterministic;
-    used only when no webhook URL is configured.
+    FALLBACK — POST /v1/chat/completions. Routes through Hermes' configured agent model and
+    REQUIRES the gateway bearer (HERMES_API_KEY = API_SERVER_KEY). This is LLM-mediated, so
+    prefer the webhook for deterministic alert delivery.
 
     Either path is fail-safe: never raises; degrades to the preview so the dashboard always renders.
     """
@@ -85,10 +84,10 @@ class HermesChatAdapter(ChatAdapter):
         raw = json.dumps({"content": md, "chat_id": config.HERMES_DISCORD_CHANNEL}).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         if config.HERMES_WEBHOOK_SECRET:
-            # HMAC-SHA256 hex over the raw body. NOTE: confirm header name + scheme against
-            # gateway/platforms/webhook.py; for the demo INSECURE_NO_AUTH (blank secret) is fine.
+            # HMAC-SHA256 hex over the raw body. Hermes' webhook platform accepts GitHub's
+            # X-Hub-Signature-256 scheme.
             sig = hmac.new(config.HERMES_WEBHOOK_SECRET.encode(), raw, hashlib.sha256).hexdigest()
-            headers["X-Signature"] = f"sha256={sig}"
+            headers["X-Hub-Signature-256"] = f"sha256={sig}"
         try:
             resp = httpx.post(config.HERMES_WEBHOOK_URL, content=raw, headers=headers, timeout=_HERMES_TIMEOUT)
             resp.raise_for_status()

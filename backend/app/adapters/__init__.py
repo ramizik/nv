@@ -8,8 +8,8 @@ from app.adapters.chat import MockChatAdapter, HermesChatAdapter, DiscordChatAda
 
 def get_inference_adapter() -> InferenceAdapter:
     # Imported lazily so the demo never fails to boot if httpx/endpoint is unhappy.
-    # 'hermes' = REAL path (Hermes delegates reasoning to local Qwen3-30B on the GB10).
-    # 'qwen'/'nemotron' = DIRECT-to-Ollama fallback (we call the model ourselves).
+    # 'qwen'/'nemotron' = primary GB10 path: direct local Qwen through Ollama.
+    # 'hermes' = gateway path: use Hermes' configured provider.
     if config.INFERENCE_BACKEND == "hermes":
         from app.adapters.inference import HermesInferenceAdapter
         return HermesInferenceAdapter()
@@ -20,9 +20,8 @@ def get_inference_adapter() -> InferenceAdapter:
 
 
 def get_chat_adapter() -> ChatAdapter:
-    # 'hermes' = hand off to the teammate's bot (the real path) — no API key required since
-    # Hermes runs locally on the box; 'discord' = raw webhook fallback; anything else (incl.
-    # missing config) stays on the safe mock preview.
+    # 'hermes' = hand off to the teammate's bot/gateway; 'discord' = raw webhook fallback;
+    # anything else stays on the safe mock preview.
     if config.CHAT_BACKEND == "hermes":
         return HermesChatAdapter()
     if config.CHAT_BACKEND == "discord" and config.DISCORD_WEBHOOK_URL:
