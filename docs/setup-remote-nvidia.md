@@ -61,21 +61,19 @@ cd /home/dell/ram/nv
 inference/remote/healthcheck.sh
 ```
 
-```bash
-cd /home/dell/ram/nv/backend
-INFERENCE_BACKEND=qwen QWEN_MODEL=lifeos-qwen3-30b:latest ./.venv/bin/python test_hermes_inference.py
-```
-
+Analyze a live transcript (dry run, no alert):
 ```bash
 curl -fsS -X POST http://127.0.0.1:8090/api/analyze \
   -H 'Content-Type: application/json' \
-  -d '{"scenario":"veneers_wedding","notify":false}' | python3 -m json.tool
+  -d '{"lead":{"name":"Test Caller"},"transcript":[{"speaker":"lead","text":"Hi, I want veneers before my wedding in 6 weeks — do you offer financing?"}],"notify":false}' | python3 -m json.tool
 ```
 
+Same, but fire the Discord alert and read it back from the records book:
 ```bash
 curl -fsS -X POST http://127.0.0.1:8090/api/analyze \
   -H 'Content-Type: application/json' \
-  -d '{"scenario":"veneers_wedding","notify":true}' | python3 -m json.tool
+  -d '{"lead":{"name":"Test Caller"},"transcript":[{"speaker":"lead","text":"Hi, I want veneers before my wedding in 6 weeks — do you offer financing?"}],"notify":true}' | python3 -m json.tool
+curl -fsS http://127.0.0.1:8090/api/leads | python3 -m json.tool
 ```
 
 Talk to Hermes directly:

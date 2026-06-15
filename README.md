@@ -84,10 +84,13 @@ uv venv .venv && . .venv/bin/activate     # or: python -m venv .venv && source .
 uv pip install -r requirements.txt        # or: pip install -r requirements.txt
 uvicorn app.main:app --port 8090
 ```
-Smoke-test the golden path:
+Smoke-test analysis of a live transcript:
 ```bash
-curl -X POST http://localhost:8090/api/simulate | python -m json.tool
-# → HOT 92/100, $7.2k–$16k, actions[], notification, system_status
+curl -X POST http://localhost:8090/api/analyze -H 'Content-Type: application/json' \
+  -d '{"lead":{"name":"Test Caller"},"transcript":[{"speaker":"lead","text":"Hi, I want veneers before my wedding in 6 weeks — do you offer financing?"}]}' \
+  | python -m json.tool
+# → score, extracted, estimated_deal_value, actions[], notification, system_status
+curl http://localhost:8090/api/leads | python -m json.tool     # the persisted records book
 ```
 
 **Frontend** (Node 18+) — another terminal:
@@ -118,9 +121,8 @@ Windows: `scripts/windows/*.ps1`. GB10 wiring: `docs/setup-remote-nvidia.md`.
 
 | Method | Route | Purpose |
 |--------|-------|---------|
-| `POST` | `/api/simulate` | **demo button** — analyze the bundled veneers scenario |
-| `POST` | `/api/analyze` | analyze a `scenario` or raw `transcript` |
-| `GET`  | `/api/leads` · `/api/leads/{id}` | list / fetch analyzed leads |
+| `POST` | `/api/analyze` | analyze a live lead `transcript` (Discord voice/text) and file it |
+| `GET`  | `/api/leads` · `/api/leads/{id}` | list / fetch the persisted lead records |
 | `GET`  | `/api/clinic` | BrightSmile clinic context |
 | `GET`  | `/api/health` | liveness + active backends + **live fleet probes** (Qwen / embed / TTS / ASR / Hermes) |
 | `*`    | `/v1/*` | **LifeOS compatibility layer** (token-authed): `health`, `models`, `timeline`, `memory`, `actions`, `actions/propose` |

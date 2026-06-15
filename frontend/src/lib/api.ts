@@ -1,18 +1,16 @@
 // Backend client. See docs/integration-plan.md for the contract.
 import type { LeadAnalysis } from "../types/lead";
-import fixture from "../data/veneers_wedding.analysis.json";
 
-const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8080";
+const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8090";
 
-// The bundled golden fixture — lets the dashboard render even if the backend is down.
-export const goldenFixture = fixture as unknown as LeadAnalysis;
-
-export async function simulate(): Promise<LeadAnalysis> {
-  const res = await fetch(`${BASE}/api/simulate`, { method: "POST" });
-  if (!res.ok) throw new Error(`simulate failed: ${res.status}`);
+// Every lead the voice agent has captured, for the records book.
+export async function listLeads(): Promise<LeadAnalysis[]> {
+  const res = await fetch(`${BASE}/api/leads`);
+  if (!res.ok) throw new Error(`leads failed: ${res.status}`);
   return res.json();
 }
 
+// Analyze a live lead transcript (e.g. a Discord voice/text interaction).
 export async function analyze(body: unknown): Promise<LeadAnalysis> {
   const res = await fetch(`${BASE}/api/analyze`, {
     method: "POST",

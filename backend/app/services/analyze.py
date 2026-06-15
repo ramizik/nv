@@ -49,11 +49,6 @@ def _save_store() -> None:
 _load_store()
 
 
-def load_scenario(name: str) -> Dict[str, Any]:
-    path = config.SAMPLE_PAYLOADS_DIR / f"{name}.json"
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def _next_lead_id() -> str:
     _COUNTER["n"] += 1
     return f"lead_{_COUNTER['n']:03d}"
@@ -142,6 +137,61 @@ def run_analysis(
     _STORE[analysis["lead_id"]] = analysis
     _save_store()
     return analysis
+
+
+def schedule_appointment(lead_id: str, when: Optional[str] = None, notes: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Mark a lead's consultation as scheduled and email BOTH clinic owners every time.
+    Returns the updated lead, or None if the lead is unknown. Email is fail-safe."""
+    from app.services.email_sender import appointment_email  # lazy: never block import
+
+    lead = _STORE.get(lead_id)
+    if not lead:
+        return None
+    appt: Dict[str, Any] = {"scheduled": True, "when": when, "notes": notes}
+    email_result = appointment_email(lead, appt)
+    appt["email"] = {
+        "sent": email_result.get("sent", False),
+        "to": email_result.get("to", config.APPOINTMENT_EMAIL_RECIPIENTS),
+        "error": email_result.get("error"),
+    }
+    lead["appointment"] = appt
+    # reflect on the actions timeline so the dashboard shows it
+    lead.setdefault("actions", []).append({
+        "type": "schedule_appointment",
+        "label": (f"Scheduled consult — emailed {', '.join(appt['email']['to'])}"
+                  if appt["email"]["sent"] else
+                  f"Scheduled consult — email FAILED ({appt['email'].get('error', 'unknown')})"),
+        "status": "done" if appt["email"]["sent"] else "failed",
+    })
+    _save_store()
+    return lead
+
+
+def list_appointments() -> List[Dict[str, Any]]:
+    """All patients who called AND scheduled a meeting — full details for the UI."""
+    out: List[Dict[str, Any]] = []
+    for l in _STORE.values():
+        appt = l.get("appointment")
+        if not appt or not appt.get("scheduled"):
+            continue
+        person, ext = l.get("lead", {}), l.get("extracted", {})
+        score, deal = l.get("score", {}), l.get("estimated_deal_value", {})
+        nba = l.get("next_best_action", {})
+        out.append({
+            "lead_id": l.get("lead_id"),
+            "name": person.get("name", "Unknown caller"),
+            "phone": person.get("phone", "n/a"),
+            "service_interest": ext.get("service_interest"),
+            "timeline": ext.get("timeline"),
+            "label": score.get("label"),
+            "score": score.get("value"),
+            "after_hours": l.get("after_hours"),
+            "received_at": l.get("received_at") or "n/a",
+            "estimated_value": f"${deal.get('low', 0):,}-${deal.get('high', 0):,}",
+            "recommended_action": nba.get("recommendation"),
+            "appointment": appt,
+        })
+    return out
 
 
 def get_lead(lead_id: str) -> Optional[Dict[str, Any]]:

@@ -13,15 +13,10 @@ The big object is **`LeadAnalysis`** — schema: `shared/schemas/lead_analysis.s
 ### `GET /api/clinic`
 Returns the full BrightSmile clinic context (for a context/debug panel). Optional in UI.
 
-### `POST /api/simulate`  ← the demo button
-No body. Loads the bundled `veneers_wedding` scenario, runs full analysis, fires the
-(mock or real) chat alert, returns a complete **`LeadAnalysis`**. **Use this for the demo.**
-
 ### `POST /api/analyze`
-Body (either `scenario` OR `transcript`):
+Analyze a live lead transcript (e.g. a Discord voice/text interaction) and file it.
 ```json
 {
-  "scenario": "veneers_wedding",
   "transcript": [{ "speaker": "lead", "text": "..." , "ts": "00:06" }],
   "lead": { "name": "Jessica Moreno", "phone": "+1-512-555-0822" },
   "channel": "voice", "after_hours": true, "notify": true
@@ -30,7 +25,7 @@ Body (either `scenario` OR `transcript`):
 Returns a complete `LeadAnalysis`.
 
 ### `GET /api/leads` / `GET /api/leads/{lead_id}`
-List all / fetch one analyzed lead (in-memory store).
+List all / fetch one lead from the persisted records book.
 
 ## `LeadAnalysis` fields → dashboard panels
 
@@ -50,12 +45,11 @@ List all / fetch one analyzed lead (in-memory store).
 ## Frontend client (suggested)
 `frontend/src/lib/api.ts`:
 ```ts
-const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8080";
-export const simulate = () => fetch(`${BASE}/api/simulate`, { method: "POST" }).then(r => r.json());
+const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8090";
+export const listLeads = () => fetch(`${BASE}/api/leads`).then(r => r.json());
 export const analyze  = (body) => fetch(`${BASE}/api/analyze`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) }).then(r => r.json());
 ```
-TS types live in `frontend/src/types/` — mirror the schema. For dev with no backend,
-import `inference/local/sample_outputs/veneers_wedding.analysis.json` as a fixture.
+TS types live in `frontend/src/types/` — mirror the schema.
 
 ## Mock → real swap (no frontend changes)
 Both reasoning and alerts now go through **Hermes** (the on-box agent gateway). Hermes' default

@@ -20,7 +20,6 @@ load_dotenv(REPO_ROOT / ".env")
 # shared/ is the cross-machine source of truth for context + fixtures
 SHARED_DIR = REPO_ROOT / "shared"
 CLINIC_CONTEXT_PATH = SHARED_DIR / "clinic_context" / "brightsmile.json"
-SAMPLE_PAYLOADS_DIR = SHARED_DIR / "sample_payloads"
 GOLDEN_OUTPUTS_DIR = REPO_ROOT / "inference" / "local" / "sample_outputs"
 
 # 'mock' | 'qwen' | 'hermes'
@@ -87,6 +86,19 @@ PARAKEET_RUNTIME_STATUS = os.getenv(
 )
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+
+# Appointment notifications — every scheduled appointment emails BOTH clinic owners.
+APPOINTMENT_EMAIL_RECIPIENTS = [
+    e.strip() for e in os.getenv(
+        "APPOINTMENT_EMAIL_RECIPIENTS",
+        "yahya.s.alhinai@gmail.com,ramis.hasanli0@gmail.com",
+    ).split(",") if e.strip()
+]
+# On-box Google OAuth token (refresh_token + gmail.send scope) used to send the emails.
+GMAIL_TOKEN_PATH = Path(os.getenv(
+    "GMAIL_TOKEN_PATH",
+    str(Path.home() / ".hermes" / "user" / "google-workspace" / "google_token.json"),
+))
 
 # LifeOS compatibility layer.
 LIFEOS_DATA_DIR = Path(os.getenv("LIFEOS_DATA_DIR", str(REPO_ROOT / "data")))

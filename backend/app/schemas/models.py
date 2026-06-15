@@ -19,8 +19,7 @@ class Lead(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
-    """Either pass a known `scenario` (loads a shared sample payload) or a raw transcript."""
-    scenario: Optional[str] = None  # e.g. 'veneers_wedding'
+    """A live lead transcript (e.g. from a Discord voice/text interaction) to analyze."""
     transcript: Optional[List[TranscriptTurn]] = None
     lead: Optional[Lead] = None
     channel: str = "voice"

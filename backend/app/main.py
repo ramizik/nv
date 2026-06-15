@@ -4,9 +4,8 @@ Entry point: `uvicorn app.main:app --reload --port 8080` (run from backend/).
 Routes (the frontend↔backend contract — see docs/integration-plan.md):
   GET  /api/health            -> liveness + which backends are active
   GET  /api/clinic            -> the BrightSmile clinic context (for a context panel)
-  POST /api/analyze           -> run full analysis on a transcript or named scenario
-  POST /api/simulate          -> convenience: analyze the bundled veneers_wedding scenario
-  GET  /api/leads             -> all analyzed leads (in-memory)
+  POST /api/analyze           -> run full analysis on a live lead transcript
+  GET  /api/leads             -> all analyzed leads (persisted records book)
   GET  /api/leads/{lead_id}   -> one lead's full LeadAnalysis
 """
 from fastapi import FastAPI, HTTPException
@@ -61,19 +60,9 @@ def clinic():
 
 @app.post("/api/analyze")
 def analyze(req: AnalyzeRequest):
-    if req.scenario:
-        payload = svc.load_scenario(req.scenario)
-        return svc.run_analysis(
-            transcript=payload["transcript"],
-            lead=payload.get("lead"),
-            channel=payload.get("channel", "voice"),
-            after_hours=payload.get("after_hours", True),
-            lead_id=payload.get("lead_id"),
-            received_at=payload.get("received_at"),
-            notify=req.notify,
-        )
+    """Analyze a live lead transcript (e.g. a Discord voice/text interaction) and file it."""
     if not req.transcript:
-        raise HTTPException(status_code=400, detail="Provide either `scenario` or `transcript`.")
+        raise HTTPException(status_code=400, detail="Provide a `transcript`.")
     return svc.run_analysis(
         transcript=[t.model_dump() for t in req.transcript],
         lead=req.lead.model_dump() if req.lead else None,
@@ -83,24 +72,25 @@ def analyze(req: AnalyzeRequest):
     )
 
 
-@app.post("/api/simulate")
-def simulate():
-    """One-click demo path: analyze the bundled veneers+wedding scenario."""
-    payload = svc.load_scenario("veneers_wedding")
-    return svc.run_analysis(
-        transcript=payload["transcript"],
-        lead=payload.get("lead"),
-        channel=payload.get("channel", "voice"),
-        after_hours=payload.get("after_hours", True),
-        lead_id=payload.get("lead_id"),
-        received_at=payload.get("received_at"),
-        notify=True,
-    )
-
-
 @app.get("/api/leads")
 def leads():
     return svc.list_leads()
+
+
+@app.get("/api/appointments")
+def appointments():
+    """All patients who called AND scheduled a consult — shown in the dashboard."""
+    return svc.list_appointments()
+
+
+@app.post("/api/leads/{lead_id}/schedule")
+def schedule(lead_id: str, body: dict | None = None):
+    """Schedule a consult for a lead. Emails BOTH clinic owners every time (fail-safe)."""
+    body = body or {}
+    result = svc.schedule_appointment(lead_id, when=body.get("when"), notes=body.get("notes"))
+    if not result:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return result
 
 
 @app.get("/api/leads/{lead_id}")

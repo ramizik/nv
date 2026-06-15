@@ -2,7 +2,7 @@
 """CLI: run the mock inference on a transcript fixture without starting the server.
 
 Usage:
-    python mock_inference.py ../../shared/sample_payloads/veneers_wedding.json
+    python mock_inference.py path/to/transcript.json   # {"transcript": [...], "lead": {...}}
 
 Reuses the backend's MockInferenceAdapter so the CLI and the API stay identical.
 """
