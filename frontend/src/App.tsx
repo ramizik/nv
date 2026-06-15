@@ -9,6 +9,7 @@ import { listLeads, health } from "./lib/api";
 import {
   LeadSummaryPanel, ScorePanel, TranscriptPanel, ExtractedPanel, ContextPanel,
   TimelinePanel, NextBestActionPanel, ChatPreviewPanel, SystemHealthPanel,
+  AppointmentPanel,
 } from "./components/panels";
 
 const money = (n?: number) => (n == null ? "—" : `$${n.toLocaleString()}`);
@@ -91,7 +92,7 @@ export default function App() {
           <thead>
             <tr>
               <th>Caller</th><th>Requested service</th><th>Intent</th>
-              <th>Est. value</th><th>Channel</th><th>Received</th>
+              <th>Appointment</th><th>Est. value</th><th>Channel</th><th>Received</th>
             </tr>
           </thead>
           <tbody>
@@ -115,6 +116,11 @@ export default function App() {
                       {label.toUpperCase()}{l.score?.value != null ? ` ${l.score.value}` : ""}
                     </span>
                   </td>
+                  <td>
+                    <span className={`appt-tag ${l.appointment?.requested ? "requested" : "none"}`}>
+                      {l.appointment?.requested ? (l.appointment.status ?? "requested").replace(/_/g, " ") : "—"}
+                    </span>
+                  </td>
                   <td className="mono">{deal ? `${money(deal.low)}–${money(deal.high)}` : "—"}</td>
                   <td><span className="chan-tag">{l.channel ?? "voice"}{l.after_hours ? " · after-hrs" : ""}</span></td>
                   <td className="mono dim">{fmtWhen(l)}</td>
@@ -136,6 +142,7 @@ export default function App() {
             <ContextPanel hits={selected.clinic_context_hits} />
             <TimelinePanel actions={selected.actions} />
             <NextBestActionPanel nba={selected.next_best_action} />
+            <AppointmentPanel appointment={selected.appointment} />
             <ChatPreviewPanel n={selected.notification} />
             <SystemHealthPanel status={selected.system_status} />
           </div>

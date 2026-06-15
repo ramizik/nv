@@ -12,11 +12,13 @@ Flow:
   4. assemble actions timeline + system_status + final canonical LeadAnalysis dict
 """
 import json
+import re
 import time
 from typing import Any, Dict, List, Optional
 
 from app import config
 from app.adapters import get_chat_adapter, get_inference_adapter
+from app.adapters.chat import send_appointment_email
 from app.services.clinic import get_clinic_context
 
 _STORE: Dict[str, Dict[str, Any]] = {}  # lead store
@@ -54,6 +56,68 @@ def _next_lead_id() -> str:
     return f"lead_{_COUNTER['n']:03d}"
 
 
+_APPOINTMENT_PHRASES = (
+    "schedule", "scheduled", "appointment", "book a consult", "book an appointment",
+    "book me", "ready to book", "reserve", "hold a slot", "put me down",
+    "come in", "consultation", "meeting", "available this", "available tomorrow",
+)
+
+
+def _lead_text(transcript: List[Dict[str, Any]]) -> str:
+    return " ".join(t.get("text", "") for t in transcript if t.get("speaker") == "lead")
+
+
+def _appointment_evidence(transcript: List[Dict[str, Any]]) -> str:
+    for turn in transcript:
+        text = turn.get("text", "")
+        if turn.get("speaker") == "lead" and any(p in text.lower() for p in _APPOINTMENT_PHRASES):
+            return text
+    return _lead_text(transcript)[:500]
+
+
+def _preferred_time(text: str, extracted: Dict[str, Any]) -> str:
+    patterns = [
+        r"\b(?:today|tomorrow|tonight)\b(?:\s+(?:morning|afternoon|evening))?",
+        r"\bnext\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+        r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b(?:\s+(?:morning|afternoon|evening))?",
+        r"\bthis\s+week\b",
+        r"\bnext\s+week\b",
+        r"\b(?:at|around)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b",
+        r"\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b",
+    ]
+    matches: List[str] = []
+    for pat in patterns:
+        matches.extend(m.group(0) for m in re.finditer(pat, text, flags=re.I))
+    if matches:
+        return ", ".join(dict.fromkeys(m.strip() for m in matches))
+    return extracted.get("timeline") or "not stated"
+
+
+def _build_appointment_state(analysis: Dict[str, Any]) -> Dict[str, Any]:
+    transcript = analysis.get("transcript", [])
+    extracted = analysis.get("extracted", {})
+    text = _lead_text(transcript)
+    text_l = text.lower()
+    requested = extracted.get("decision_stage") == "ready_to_book" or any(p in text_l for p in _APPOINTMENT_PHRASES)
+    status = "none"
+    if requested:
+        status = "scheduled" if any(p in text_l for p in ("scheduled", "confirmed", "see you", "booked")) else "requested"
+    lead = analysis.get("lead", {})
+    services = extracted.get("service_interest") or []
+    return {
+        "requested": requested,
+        "status": status,
+        "patient_name": lead.get("name") or "Unknown caller",
+        "patient_phone": lead.get("phone") or "n/a",
+        "patient_email": lead.get("email") or "n/a",
+        "service": ", ".join(services) if services else "unspecified service",
+        "preferred_time": _preferred_time(text, extracted) if requested else "n/a",
+        "meeting_type": "consultation",
+        "evidence": _appointment_evidence(transcript) if requested else "",
+        "email": {"sent": False, "recipients": config.APPOINTMENT_EMAIL_RECIPIENTS, "skipped": not requested},
+    }
+
+
 def run_analysis(
     transcript: List[Dict[str, Any]],
     lead: Optional[Dict[str, Any]] = None,
@@ -83,6 +147,7 @@ def run_analysis(
     # actions timeline
     n_slots = len([v for v in analysis.get("extracted", {}).values() if v not in (None, [], "", "unknown")])
     label = analysis.get("score", {}).get("label", "?")
+    appointment = _build_appointment_state(analysis)
     actions: List[Dict[str, Any]] = [
         {"type": "extract", "label": f"Extracted {n_slots} qualification slots from transcript", "status": "done"},
         {"type": "context_check", "label": "Consulted BrightSmile policy: services, financing, premium-lead rules", "status": "done"},
@@ -99,6 +164,19 @@ def run_analysis(
             "status": "done" if notification.get("sent") else "failed",
         })
     analysis["notification"] = notification
+
+    if appointment["requested"]:
+        email_result = send_appointment_email({**analysis, "appointment": appointment})
+        appointment["email"] = email_result
+        if email_result.get("sent"):
+            appointment["status"] = "email_sent"
+        actions.append({
+            "type": "appointment_email",
+            "label": f"Sent appointment scheduling email to {', '.join(email_result.get('recipients', []))}",
+            "status": "done" if email_result.get("sent") else "failed",
+            "detail": email_result.get("error", ""),
+        })
+    analysis["appointment"] = appointment
 
     actions.append({"type": "draft_followup", "label": "Drafted concierge follow-up message", "status": "done"})
     if label == "hot":
@@ -223,6 +301,7 @@ def summarize_leads() -> Dict[str, Any]:
             "timeline": ex.get("timeline"),
             "estimated_value": f"${deal.get('low', 0):,}-${deal.get('high', 0):,}",
             "recommended_action": nba.get("recommendation"),
+            "appointment": l.get("appointment", {}),
         }
 
     rows = sorted((_row(l) for l in leads), key=lambda r: (order.get(r["label"], 9), -(r["score"] or 0)))

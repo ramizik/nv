@@ -66,6 +66,30 @@ export interface SystemStatus {
   detail?: string;
 }
 
+export interface AppointmentEmail {
+  platform?: string;
+  sent?: boolean;
+  skipped?: boolean;
+  recipients?: string[];
+  subject?: string;
+  body_preview?: string;
+  error?: string;
+  response?: string;
+}
+
+export interface AppointmentState {
+  requested?: boolean;
+  status?: "none" | "requested" | "scheduled" | "email_sent" | string;
+  patient_name?: string;
+  patient_phone?: string;
+  patient_email?: string;
+  service?: string;
+  preferred_time?: string;
+  meeting_type?: string;
+  evidence?: string;
+  email?: AppointmentEmail;
+}
+
 export interface LeadAnalysis {
   lead_id: string;
   received_at?: string;
@@ -81,5 +105,6 @@ export interface LeadAnalysis {
   actions: AgentAction[];
   next_best_action?: NextBestAction;
   notification?: Notification;
+  appointment?: AppointmentState;
   system_status: SystemStatus[];
 }

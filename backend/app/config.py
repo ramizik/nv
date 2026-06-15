@@ -57,6 +57,16 @@ HERMES_DISCORD_CHANNEL = os.getenv("HERMES_DISCORD_CHANNEL", "150973427820698419
 # Secondary standalone path only (NOT the bot Hermes owns) — raw Discord webhook.
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 
+# Appointment scheduling notifications. The backend records durable appointment
+# state and sends a verified Gmail notification to both configured recipients.
+APPOINTMENT_EMAIL_ENABLED = os.getenv("APPOINTMENT_EMAIL_ENABLED", "true").lower() not in ("0", "false", "no")
+APPOINTMENT_EMAIL_RECIPIENTS = [
+    r.strip()
+    for r in os.getenv("APPOINTMENT_EMAIL_RECIPIENTS", "yahya.s.alhinai@gmail.com,ramis.hasanli0@gmail.com").split(",")
+    if r.strip()
+]
+APPOINTMENT_EMAIL_SUBJECT_PREFIX = os.getenv("APPOINTMENT_EMAIL_SUBJECT_PREFIX", "LifeOS appointment request")
+
 # NVIDIA NIM sidecars on the GB10. The app currently consumes Qwen for lead
 # analysis, while these endpoints make the wider LifeOS-style voice/memory
 # pipeline visible and ready for follow-on integration.
@@ -87,13 +97,6 @@ PARAKEET_RUNTIME_STATUS = os.getenv(
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 
-# Appointment notifications — every scheduled appointment emails BOTH clinic owners.
-APPOINTMENT_EMAIL_RECIPIENTS = [
-    e.strip() for e in os.getenv(
-        "APPOINTMENT_EMAIL_RECIPIENTS",
-        "yahya.s.alhinai@gmail.com,ramis.hasanli0@gmail.com",
-    ).split(",") if e.strip()
-]
 # On-box Google OAuth token (refresh_token + gmail.send scope) used to send the emails.
 GMAIL_TOKEN_PATH = Path(os.getenv(
     "GMAIL_TOKEN_PATH",

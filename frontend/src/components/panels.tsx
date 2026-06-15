@@ -3,6 +3,7 @@
 import type {
   LeadAnalysis, Score, Extracted, ContextHit, AgentAction,
   NextBestAction, Notification, SystemStatus, TranscriptTurn, DealValue,
+  AppointmentState,
 } from "../types/lead";
 
 export function Panel({ idx, title, span, children }: { idx?: string; title: string; span: string; children: React.ReactNode; }) {
@@ -193,9 +194,45 @@ export function ChatPreviewPanel({ n }: { n?: Notification }) {
   );
 }
 
+export function AppointmentPanel({ appointment }: { appointment?: AppointmentState }) {
+  const a = appointment ?? { requested: false, status: "none" };
+  const email = a.email ?? {};
+  const rows: [string, React.ReactNode][] = [
+    ["Status", (a.status ?? "none").replace(/_/g, " ")],
+    ["Patient", a.patient_name ?? "Unknown caller"],
+    ["Phone", a.patient_phone ?? "n/a"],
+    ["Email", a.patient_email ?? "n/a"],
+    ["Requested service", a.service ?? "—"],
+    ["Preferred time", a.preferred_time ?? "—"],
+    ["Meeting type", a.meeting_type ?? "consultation"],
+    ["Email recipients", (email.recipients ?? []).join(", ") || "—"],
+    ["Email status", email.sent ? "sent" : email.skipped ? "skipped" : email.error ? "failed" : "pending"],
+  ];
+  return (
+    <Panel idx="08" title="Appointment / Scheduling" span="col-7">
+      {!a.requested ? <div className="empty">No appointment scheduling request detected.</div> : (
+        <>
+          <div className={`appointment-banner ${email.sent ? "sent" : email.error ? "failed" : "pending"}`}>
+            <span>{email.sent ? "Email sent" : email.error ? "Email failed" : "Email pending"}</span>
+            <span>{a.status?.replace(/_/g, " ")}</span>
+          </div>
+          <div className="kv appointment-kv">
+            {rows.map(([k, v]) => (
+              <div className="kv-row" key={k}><span className="k">{k}</span><span className="v">{v}</span></div>
+            ))}
+          </div>
+          {a.evidence && <div className="evidence"><b>Call evidence:</b> {a.evidence}</div>}
+          {email.subject && <div className="email-subject"><b>Subject:</b> {email.subject}</div>}
+          {email.error && <div className="email-error">{email.error}</div>}
+        </>
+      )}
+    </Panel>
+  );
+}
+
 export function SystemHealthPanel({ status }: { status: SystemStatus[] }) {
   return (
-    <Panel idx="09" title="System Health / Model Status" span="col-12">
+    <Panel idx="10" title="System Health / Model Status" span="col-12">
       {status.map((s, i) => (
         <div className="sys-row" key={i}>
           <div><span className="c">{s.component}</span> <span className="d">{s.detail}</span></div>

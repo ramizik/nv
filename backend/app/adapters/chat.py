@@ -103,7 +103,9 @@ class HermesChatAdapter(ChatAdapter):
         payload = {"messages": [
             {"role": "system", "content": "You relay pre-formatted staff alerts to Discord exactly as given."},
             {"role": "user", "content": instruction},
-        ]}
+        ],
+        "model": config.HERMES_INFERENCE_MODEL,
+        "max_tokens": 1024}
         # The gateway requires its bearer on every route (_check_auth → 401 invalid_api_key).
         headers = {"Content-Type": "application/json"}
         if config.HERMES_API_KEY:
@@ -126,3 +128,76 @@ class DiscordChatAdapter(ChatAdapter):
             return {"platform": "discord", "sent": True, "preview_markdown": md}
         except Exception as e:  # never let a chat failure break the demo
             return {"platform": "discord", "sent": False, "preview_markdown": md, "error": str(e)}
+
+
+def build_appointment_email(analysis: Dict[str, Any]) -> Dict[str, str]:
+    """Create the exact operator-facing appointment email body."""
+    lead = analysis.get("lead", {})
+    ext = analysis.get("extracted", {})
+    appt = analysis.get("appointment", {})
+    score = analysis.get("score", {})
+    services = ", ".join(ext.get("service_interest") or ["unspecified service"])
+    patient_name = lead.get("name") or "Unknown caller"
+    subject = f"{config.APPOINTMENT_EMAIL_SUBJECT_PREFIX}: {patient_name} - {services}"
+    body = "\n".join([
+        "LifeOS detected an appointment scheduling request.",
+        "",
+        "Caller / patient details",
+        f"- Name: {patient_name}",
+        f"- Phone: {lead.get('phone') or 'n/a'}",
+        f"- Email: {lead.get('email') or 'n/a'}",
+        f"- Channel: {analysis.get('channel') or 'voice'}",
+        f"- Received: {analysis.get('received_at') or 'n/a'}",
+        f"- Lead ID: {analysis.get('lead_id') or 'n/a'}",
+        "",
+        "Appointment details",
+        f"- Status: {appt.get('status') or 'requested'}",
+        f"- Requested service: {services}",
+        f"- Preferred time / timeline: {appt.get('preferred_time') or ext.get('timeline') or 'not stated'}",
+        f"- Meeting type: {appt.get('meeting_type') or 'consultation'}",
+        f"- Decision stage: {ext.get('decision_stage') or 'unknown'}",
+        f"- Score: {score.get('label', 'unknown').upper()} {score.get('value', '?')}/100",
+        "",
+        "Summary",
+        analysis.get("summary") or "n/a",
+        "",
+        "Next best action",
+        analysis.get("next_best_action", {}).get("recommendation") or "n/a",
+        "",
+        "Transcript evidence",
+        appt.get("evidence") or "n/a",
+    ])
+    return {"subject": subject, "body": body}
+
+
+def send_appointment_email(analysis: Dict[str, Any]) -> Dict[str, Any]:
+    """Send the appointment email through the on-box Gmail token."""
+    recipients = config.APPOINTMENT_EMAIL_RECIPIENTS
+    preview = build_appointment_email(analysis)
+    result: Dict[str, Any] = {
+        "platform": "hermes",
+        "sent": False,
+        "recipients": recipients,
+        "subject": preview["subject"],
+        "body_preview": preview["body"],
+        "skipped": False,
+    }
+    if not config.APPOINTMENT_EMAIL_ENABLED:
+        result.update({"skipped": True, "error": "APPOINTMENT_EMAIL_ENABLED=false"})
+        return result
+    if not recipients:
+        result.update({"skipped": True, "error": "APPOINTMENT_EMAIL_RECIPIENTS is empty"})
+        return result
+
+    # Send directly via the on-box Gmail API (refresh_token + gmail.send scope).
+    # This actually confirms delivery (real message id) rather than trusting an agent reply.
+    from app.services.email_sender import send_email
+    sent = send_email(preview["subject"], preview["body"], recipients)
+    result["platform"] = "gmail"
+    result.update({
+        "sent": sent.get("sent", False),
+        "message_id": sent.get("id"),
+        "from": sent.get("from"),
+        "error": sent.get("error"),
+    })
+    return result
