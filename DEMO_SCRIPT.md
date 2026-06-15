@@ -5,13 +5,13 @@ agent caught it, qualified it, scored it HOT, alerted staff, and drafted the cal
 all on-prem on the GB10.*
 
 ## Setup (before judges arrive)
-- Backend running: `uvicorn app.main:app --port 8080` (repo root `.env` set).
+- Backend running: `uvicorn app.main:app --port 8090` (repo root `.env` set).
 - Frontend running: `npm run dev` → dashboard open at `http://localhost:5173`.
-- For the live wow: `CHAT_BACKEND=discord` + `DISCORD_WEBHOOK_URL` set, Discord channel
-  visible on a second screen. (If anything is flaky: keep all-mock — the dashboard shows
-  the alert preview anyway.)
-- Optional credibility: `INFERENCE_BACKEND=qwen` and `CHAT_BACKEND=hermes` so System Health
-  shows local Qwen plus Hermes handoff.
+- For the live wow: `INFERENCE_BACKEND=qwen` + `CHAT_BACKEND=hermes` — reasoning runs on
+  local Qwen (`:11434`) and Hermes posts the alert to Discord via its `deliver_only` webhook
+  (verified working). Keep the Discord channel visible on a second screen.
+- If anything is flaky: keep all-mock — the dashboard still shows the alert preview and
+  System Health degrades to "mock" without hard-failing.
 
 ## Run of show
 
@@ -38,15 +38,16 @@ all on-prem on the GB10.*
 > "Staff get a structured alert and a ready-to-send message within seconds."
 
 **2:15 — Proof it's local (20s)**
-- **System Health:** Qwen direct — GB10 · Hermes online · embedding/TTS online.
+- **System Health:** live probes — Qwen **direct on :11434** · Hermes alerts online ·
+  Embeddings (:8001) · TTS (:8003), all green on the GB10.
 > "Reasoning runs on local Qwen, Hermes handles the alert/action handoff, and the NIM
-> sidecars are ready on the Dell Pro Max GB10."
+> sidecars are ready on the Dell Pro Max GB10 — and this panel is probing them live."
 
 **2:35 — Close on ROI (25s)**
 > "One recovered veneer case pays for the hardware many times over. This is an always-on
 > revenue recovery agent that runs entirely on-prem. That's the pitch."
 
 ## Failure fallbacks
-- GB10 down → stays HOT 92 via mock; System Health reads "mock" (don't dwell, story holds).
-- Discord down → alert still shows in Chat Notification Preview panel.
+- GB10 / Qwen down → stays HOT 92 via mock; System Health reads "mock" (don't dwell, story holds).
+- Hermes / Discord down → alert still shows in the Chat Notification Preview panel.
 - Never do live microphone audio. Always the fixture transcript.
