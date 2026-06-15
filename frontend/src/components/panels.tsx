@@ -1,5 +1,5 @@
 // All dashboard panels. Each takes the relevant slice of LeadAnalysis and renders one
-// operator-facing surface. Panel order mirrors DEMO_SCRIPT.md / integration-plan.md.
+// operator-facing surface. Panel order mirrors docs/integration-plan.md.
 import type {
   LeadAnalysis, Score, Extracted, ContextHit, AgentAction,
   NextBestAction, Notification, SystemStatus, TranscriptTurn, DealValue,

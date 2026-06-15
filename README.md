@@ -23,8 +23,7 @@ patient. Here, the agent:
 5. **Acts:** posts a staff alert to Discord, drafts a concierge follow-up, sets a 30-min callback task.
 6. **Shows its work** on a 9-panel operator dashboard (no raw chain-of-thought).
 
-**ROI:** one recovered case pays for the hardware many times over. See `docs/judging-story.md`
-and the run-of-show in `DEMO_SCRIPT.md`.
+**ROI:** one recovered case pays for the hardware many times over. See `docs/judging-story.md`.
 
 ## What makes it agentic (not a chatbot)
 Extract → reason against clinic rules → decide a score + urgency → **act across three
@@ -128,6 +127,6 @@ Windows: `scripts/windows/*.ps1`. GB10 wiring: `docs/setup-remote-nvidia.md`.
 | `WS`   | `/v1/audio/stream` | LifeOS audio ingest → SQLite store (streams + frames) |
 
 ## Docs map
-`ARCHITECTURE.md` · `DEMO_SCRIPT.md` · `docs/judging-story.md` ·
+`ARCHITECTURE.md` · `docs/judging-story.md` ·
 `docs/integration-plan.md` (FE↔BE API) · **`docs/hermes-integration.md`** (the Hermes seam) ·
 `docs/setup-remote-nvidia.md` (GB10 wiring)
