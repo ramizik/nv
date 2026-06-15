@@ -12,7 +12,7 @@ Define once, render everywhere.
 |-------|------|----------------|
 | Voice | PersonaPlex (or transcript fixture) | Natural intake; emits transcript turns |
 | Lead Analyzer (ours) | FastAPI (`backend/app`) | Sequences extract→score→context→notify; assembles `LeadAnalysis`; in-memory store |
-| Reasoning | **Hermes** (`:8642`) → **local Qwen3-30B** via Ollama on GB10 (or mock heuristic) | Extraction, lead scoring, next-best-action — routed through Hermes to its on-box default model |
+| Reasoning | **Qwen3-30B** via local Ollama on GB10 (`:11434/v1`) or mock heuristic | Extraction, lead scoring, next-best-action |
 | Clinic context | flat JSON (`shared/clinic_context/brightsmile.json`) | Services, hours, financing, premium-lead rules |
 | Messaging / tasks | **Hermes** (teammate's service, `:8642`) | Owns the Discord bot + channel; we hand off the finished alert to it |
 | Dashboard | React + Vite + TS (`frontend/`) | Observability: 9 operator panels |
@@ -20,8 +20,7 @@ Define once, render everywhere.
 > **Hermes is NOT our backend.** Earlier drafts labeled `backend/app` "Hermes" — that was
 > wrong. Hermes is the teammate's separate running service (OpenAI-compatible agent gateway
 > on `:8642`, Discord bot, memory, tasks). Our service is the **Lead Analyzer**; it does NOT
-> run its own model — it routes reasoning *through* Hermes (which delegates to its on-box
-> default model, Qwen3-30B) and hands `LeadAnalysis` to Hermes for the alert.
+> run Hermes. It routes reasoning to local Qwen and hands `LeadAnalysis` to Hermes for the alert.
 > See `docs/hermes-integration.md`.
 
 ## Data flow
@@ -37,20 +36,18 @@ transcript ─▶ InferenceAdapter.analyze(transcript, clinic_context)
 
 Orchestration lives in `backend/app/services/analyze.py`. Adapters resolved by
 `backend/app/adapters/__init__.py` from env (`config.py`). The inference adapter lives in
-`backend/app/adapters/inference.py` (`HermesInferenceAdapter` primary, `QwenInferenceAdapter`
-direct fallback); the old `backend/app/adapters/nemotron.py` was removed.
+`backend/app/adapters/inference.py` (`QwenInferenceAdapter` primary, `HermesInferenceAdapter`
+optional gateway path); the old `backend/app/adapters/nemotron.py` was removed.
 
 ## Swap-points (the only places mock↔real differ)
 
 1. **`InferenceAdapter`** (`adapters/base.py`, impls in `adapters/inference.py`)
    - `MockInferenceAdapter` (default) — rule-based extraction + scoring off clinic context
      (zero deps). Grafts hand-tuned prose for the veneers+wedding showcase path.
-   - `HermesInferenceAdapter` (REAL) — OpenAI-compatible call to **Hermes** (`:8642/v1`),
-     which delegates to its on-box default model (Qwen3-30B via Ollama); falls back to mock
-     on any error.
-   - `QwenInferenceAdapter` (optional `qwen`, legacy alias `nemotron`) — DIRECT-to-Ollama
-     call to `:11434/v1` ourselves; used only as a fallback if Hermes is down. Also falls
-     back to mock on any error.
+   - `QwenInferenceAdapter` (REAL) — direct local call to Qwen on Ollama (`:11434/v1`);
+     falls back to mock on any error.
+   - `HermesInferenceAdapter` (optional) — OpenAI-compatible call to **Hermes** (`:8642/v1`)
+     using Hermes' configured provider; also falls back to mock on any error.
 2. **`ChatAdapter`** (`adapters/base.py`)
    - `MockChatAdapter` — returns alert markdown as a preview.
    - `HermesChatAdapter` — hands the alert to Hermes (`:8642`), which relays it via its
@@ -58,21 +55,15 @@ direct fallback); the old `backend/app/adapters/nemotron.py` was removed.
    - `DiscordChatAdapter` — secondary fallback: raw Discord webhook (no bot).
 
 ## Hermes integration (the seam)
-- **Hermes does both reasoning and messaging.** Our Lead Analyzer does NOT run its own model.
-  It scores the lead by calling Hermes (`:8642/v1`), which **delegates reasoning to its local
-  default model — Qwen3-30B, served via Ollama on the GB10** — so inference stays on-box. It
-  then hands the finished `LeadAnalysis` to Hermes, which owns the Discord bot + channel
-  `1509734278206984194`.
-- **Is routing through Hermes still on-box?** Yes. Hermes' default model is **local
-  Qwen3-30B, NOT cloud Gemini** — so routing scoring through Hermes keeps patient
-  conversations on the box. This is the intended real path. (An earlier draft claimed Hermes
-  defaulted to cloud Gemini and that we must bypass it; that is no longer true.)
-- **Model choice:** blank `HERMES_INFERENCE_MODEL` = Hermes default Qwen3-30B (≈18 GB, MoE
-  ~3B active → fast, coexists with the NIM voice stack). Set `lifeos-nemotron-120b:latest`
-  to force the heavier/slower 120B (≈82 GB) that monopolizes the box. Only ONE large model
-  is resident at a time (128 GB unified).
-- **Fallback:** if Hermes is down, `INFERENCE_BACKEND=qwen` calls Ollama (`:11434/v1`)
-  directly ourselves. Both paths degrade to mock/preview on any error.
+- **Hermes does messaging/actions; Qwen does reasoning.** Our Lead Analyzer scores the lead
+  by calling local Qwen (`:11434/v1`) and then hands the finished `LeadAnalysis` to Hermes,
+  which owns the Discord bot + channel `1509734278206984194`.
+- **Why not route inference through Hermes?** The local-Qwen Hermes path was unstable with
+  the full Hermes prompt, so Hermes was restored to a reliable Gemini default. This repo keeps
+  patient/demo inference on-box by calling Qwen directly.
+- **Model choice:** `QWEN_MODEL=lifeos-qwen3-30b:latest` is the normal hot model. Nemotron-120B
+  is a deep-planning profile and not part of this app's hot path.
+- **Fallback:** both real adapters degrade to mock/preview on any error.
 - **Cross-host:** Hermes binds `127.0.0.1:8642`. Our backend reaches it only if it runs **on
   the GB10 box** (recommended topology) or via an SSH tunnel. Full detail + the teammate's
   required changes: `docs/hermes-integration.md`.
@@ -86,14 +77,12 @@ the demo critical path.
 
 ## Dual-machine model
 - **Windows dev machine:** frontend + backend dev, all-mock demo.
-- **Remote NVIDIA (GB10) Linux box:** runs Hermes (`:8642`), which delegates reasoning to
-  **local Qwen3-30B** served via **Ollama** (`:11434/v1`, OpenAI-compatible, no key). For the
-  live demo, run our backend **on the GB10** so it reaches Hermes over localhost. Backend
-  points at Hermes for both reasoning and messaging:
-  `INFERENCE_BACKEND=hermes` + `CHAT_BACKEND=hermes` + `HERMES_BASE_URL=http://127.0.0.1:8642`
-  + `HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>` (gateway bearer; the model itself is
-  keyless) + `HERMES_DISCORD_CHANNEL=1509734278206984194` + `HERMES_INFERENCE_MODEL=` (blank =
-  Qwen3-30B). `shared/` is the source of truth.
+- **Remote NVIDIA (GB10) Linux box:** runs local Qwen3-30B through **Ollama** (`:11434/v1`)
+  for reasoning, plus Hermes (`:8642`) for alerts/actions. For the live demo, run our backend
+  **on the GB10** so it reaches all loopback services:
+  `INFERENCE_BACKEND=qwen` + `CHAT_BACKEND=hermes` + `QWEN_MODEL=lifeos-qwen3-30b:latest`
+  + `HERMES_BASE_URL=http://127.0.0.1:8642` + `HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>`.
+  `shared/` is the source of truth.
 - ⚠️ **`:8080` is taken on the box — run our backend on `:8090`** (`uvicorn app.main:app --port 8090`).
 - ⚠️ **Single-model residency:** 128 GB unified memory holds only ONE large local model at a
   time. Qwen3-30B (≈18 GB) coexists with the NIM voice/embed stack; Nemotron-120B (≈82 GB)

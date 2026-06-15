@@ -12,8 +12,8 @@ OpenClaw, OpenShell, or NemoClaw.
 | Hermes agent/tools/actions/alerts | Hermes gateway | `http://127.0.0.1:8642` | Primary gateway |
 | Text memory embeddings | `nvidia/llama-nemotron-embed-1b-v2` NIM | `http://127.0.0.1:8001/v1` | Running |
 | Voice output | Magpie multilingual TTS NIM | `http://127.0.0.1:8003/v1` | Running |
-| Streaming ASR | `nemotron-asr-streaming` NIM | `http://127.0.0.1:8002/v1` | Blocked until NGC API key is available to the container |
-| Parakeet ASR fallback | `parakeet-0.6b-tdt` NIM | unset | Blocked: local image is `linux/amd64`, GB10 is `linux/arm64` |
+| Streaming ASR | `nemotron-asr-streaming` NIM | `http://127.0.0.1:8002/v1` | Running, realtime sessions enabled |
+| Parakeet ASR fallback | `parakeet-0.6b-tdt` NIM | unset | **Dropped (intentional)** — redundant backup; amd64-only image won't run on arm64; role covered by nemotron-asr-streaming |
 
 ## Important Correction
 
@@ -70,6 +70,7 @@ TTS_SAMPLE_RATE_HZ=22050
 
 ASR_BACKEND=nemotron-asr-streaming
 ASR_BASE_URL=http://127.0.0.1:8002/v1
+ASR_RUNTIME_STATUS=ready: nemotron-asr-streaming NIM on :8002, realtime sessions enabled
 ```
 
 Port `8080` is already occupied by the LifeOS backend on the GB10. Run this app
@@ -130,7 +131,7 @@ curl -fsS http://127.0.0.1:8003/v1/audio/synthesize \
 - If Hermes returns `401 invalid_api_key`, copy `API_SERVER_KEY` from
   `~/.hermes/.env` into this repo's `.env` as `HERMES_API_KEY`.
 - If ASR fails with `ManifestDownloadError` or mentions missing API key, restart
-  the ASR NIM container with a valid NGC API key. Until that is fixed, this repo
-  uses transcript fixtures.
+  it with `inference/remote/start_asr.sh`; the script reads `NVIDIA_API_KEY` from
+  `~/.hermes/.env` and passes it as `NGC_API_KEY` to the container.
 - Do not try to run the downloaded Parakeet image on this GB10. The available
   image is `linux/amd64`; the machine is `linux/arm64`.

@@ -36,26 +36,25 @@ surfaces** (chat alert, drafted message, callback task) → render the decision 
 
 ```
 [Voice transcript]──▶ Lead Analyzer (FastAPI) ──▶ LeadAnalysis JSON ──┬──▶ React dashboard
-  PersonaPlex/fixture   │ InferenceAdapter: mock │ hermes              └──▶ ChatAdapter: mock │ hermes
-                        │   └▶ Hermes (:8642) ──▶ LOCAL Qwen3-30B          └▶ Hermes (teammate's
-                        │      (Ollama on GB10) — on-box reasoning            bot) → Discord #front-desk
+  fixture / ASR later   │ InferenceAdapter: mock │ qwen                └──▶ ChatAdapter: mock │ hermes
+                        │   └▶ Ollama (:11434/v1) ──▶ LOCAL Qwen3-30B       └▶ Hermes (teammate's
+                        │      on-box reasoning                                bot) → Discord #front-desk
                         └ clinic_context.json (BrightSmile rules)
 ```
 
 The entire system flows **one canonical object — `LeadAnalysis`**
 (`shared/schemas/lead_analysis.schema.json`). Two swap-points behind interfaces —
 `InferenceAdapter` and `ChatAdapter` — both **default to mock**, so the demo runs 100% on
-one machine with zero external deps. Flip **one env var** to use the real GB10 / Hermes;
+one machine with zero external deps. Flip env vars to use the real GB10 Qwen / Hermes stack;
 both **degrade to mock on error** so the demo can't hard-fail.
 
-**Reasoning routes through Hermes, which delegates to its LOCAL default model — Qwen3-30B,
-served via Ollama on the GB10.** So inference stays **on-box** (patient conversations never
-leave the building) *and* we don't run our own model server. Hermes also owns the Discord
-bot, so the *finished* alert is handed to it too. (A direct-to-Ollama `qwen` adapter exists
-as a fallback if Hermes is down.) Details: `ARCHITECTURE.md` · `docs/hermes-integration.md`.
+**Reasoning routes directly to LOCAL Qwen3-30B served via Ollama on the GB10.** So inference
+stays **on-box** (patient conversations never leave the building). Hermes owns the Discord
+bot and agent/tool gateway, so the *finished* alert is handed to it. Details:
+`ARCHITECTURE.md` · `docs/hermes-integration.md`.
 
-> **Pitch:** Voice, reasoning (Qwen via Hermes), and the Discord alert all run locally on the
-> Dell Pro Max GB10 — nothing leaves the building.
+> **Pitch:** Reasoning runs on local Qwen, Hermes handles alerts/actions, and the NIM
+> sidecars run on the Dell Pro Max GB10.
 
 ## Repo layout
 
@@ -98,15 +97,16 @@ Windows: `scripts/windows/*.ps1` + `docs/setup-windows.md`. GB10 wiring: `docs/s
 
 | Switch | Env vars |
 |--------|----------|
-| Real on-box inference via Hermes → Qwen | `INFERENCE_BACKEND=hermes` · `HERMES_BASE_URL=http://127.0.0.1:8642` · `HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>` · `HERMES_INFERENCE_MODEL=` (blank = Hermes default Qwen3-30B; set `lifeos-nemotron-120b:latest` to force heavier reasoning) |
-| Real staff alert via Hermes bot | `CHAT_BACKEND=hermes` · `HERMES_BASE_URL=http://127.0.0.1:8642` · `HERMES_DISCORD_CHANNEL=1509734278206984194` (backend runs on the GB10 box or tunnels `:8642`) |
-| Direct-to-Ollama inference (fallback, if Hermes down) | `INFERENCE_BACKEND=qwen` (legacy alias `nemotron`) · `NEMOTRON_BASE_URL=http://127.0.0.1:11434/v1` · `NEMOTRON_MODEL=lifeos-qwen3-30b` (Ollama, no key) |
+| Real on-box inference via Qwen | `INFERENCE_BACKEND=qwen` · `QWEN_BASE_URL=http://127.0.0.1:11434/v1` · `QWEN_MODEL=lifeos-qwen3-30b:latest` · `QWEN_THINKING_DIRECTIVE=/no_think` |
+| Real staff alert via Hermes bot | `CHAT_BACKEND=hermes` · `HERMES_BASE_URL=http://127.0.0.1:8642` · `HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>` · `HERMES_DISCORD_CHANNEL=1509734278206984194` |
+| Optional Hermes inference path | `INFERENCE_BACKEND=hermes` · uses Hermes' configured provider; on this host the reliable default is Gemini, not guaranteed local Qwen |
 | Raw Discord webhook (fallback) | `CHAT_BACKEND=discord` · `DISCORD_WEBHOOK_URL=...` |
 
-> **GB10 demo reality:** Hermes (teammate's service, owns Discord) binds `127.0.0.1:8642` and
-> delegates reasoning to **local Qwen3-30B** (≈18 GB, MoE ~3B active → fast) served via Ollama
-> on `:11434`; it coexists with the NIM voice stack. Nemotron-120B (≈82 GB) is an optional
-> heavier/slower alternative. **`:8080` is taken so run our backend on `:8090`**.
+> **GB10 demo reality:** Qwen3-30B runs locally through Ollama on `:11434/v1` and is the
+> main scoring/conversation brain. Hermes on `:8642` owns agent/tool/alert delivery.
+> Embeddings (`:8001`) and TTS (`:8003`) are running NIM sidecars. ASR is blocked until
+> the NGC key is available to the ASR container; Parakeet is blocked by an amd64 image on
+> arm64. **`:8080` is taken so run our backend on `:8090`**.
 > ⚠️ 128 GB unified ⇒ **only ONE large local model resident at a time** — pre-warm exactly the
 > demo model. See `docs/hermes-integration.md` for the seam, topology, and the Hermes-owner checklist.
 

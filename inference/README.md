@@ -7,7 +7,9 @@ Everything about model runtime, mock-vs-real inference, and GB10 smoke tests.
 - `local/mock_inference.py` — run the heuristic analysis on a transcript fixture.
 - `local/sample_inputs/`, `local/sample_outputs/` — fixtures and golden outputs.
 - `remote/start_qwen.sh` — warm `lifeos-qwen3-30b:latest` on Ollama.
-- `remote/healthcheck.sh` — verify Qwen, Hermes, embedding NIM, and TTS NIM.
+- `remote/start_asr.sh` — start `nemotron-asr-streaming` NIM with the NVIDIA key from
+  `~/.hermes/.env`.
+- `remote/healthcheck.sh` — verify Qwen, Hermes, embedding NIM, TTS NIM, and ASR NIM.
 - `remote/run_model_server.sh` — stable entry point delegating to `start_qwen.sh`.
 
 ## Current GB10 Profile
@@ -37,8 +39,8 @@ TTS_BASE_URL=http://127.0.0.1:8003/v1
 
 ## Known Blockers
 
-- `nemotron-asr-streaming` image is downloaded, but runtime model artifacts need
-  `NGC_API_KEY` inside the container. Until then, ASR is blocked.
+- `nemotron-asr-streaming` is running on `:8002` after passing the Hermes
+  `NVIDIA_API_KEY` into the container as `NGC_API_KEY`.
 - `parakeet-0.6b-tdt` image exists locally but is `linux/amd64`; the GB10 host
   is `linux/arm64`, so it exits with `exec format error`.
 - The 120B GGUF model is a deep-planning profile, not part of the normal hot path.

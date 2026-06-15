@@ -10,12 +10,16 @@ Routes (the frontend↔backend contract — see docs/integration-plan.md):
   GET  /api/leads/{lead_id}   -> one lead's full LeadAnalysis
 """
 from fastapi import FastAPI, HTTPException
+from fastapi import WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import config
 from app.schemas.models import AnalyzeRequest
 from app.services import analyze as svc
 from app.services.clinic import get_clinic_context
+from app.services.lifeos_audio import audio_stream
+from app.services.lifeos_routes import router as lifeos_router
+from app.services.lifeos_store import init_lifeos
 from app.services.system_health import collect_runtime_health
 
 app = FastAPI(title="Local Voice Lead Closer", version="0.1.0")
@@ -26,6 +30,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(lifeos_router)
+
+
+@app.on_event("startup")
+def startup() -> None:
+    init_lifeos()
 
 
 @app.get("/api/health")
@@ -37,6 +47,11 @@ def health():
         "discord_configured": bool(config.DISCORD_WEBHOOK_URL),
         "runtime": collect_runtime_health(),
     }
+
+
+@app.websocket("/v1/audio/stream")
+async def lifeos_audio_stream(websocket: WebSocket):
+    await audio_stream(websocket)
 
 
 @app.get("/api/clinic")

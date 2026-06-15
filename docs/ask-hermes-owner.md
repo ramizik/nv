@@ -1,10 +1,9 @@
 # For the Hermes owner — what we need to integrate (copy/paste to them)
 
 > Context: I (the Lead Analyzer / dashboard side) score inbound cosmetic-dental leads and produce
-> one `LeadAnalysis` JSON. I want to **route the reasoning through your Hermes gateway**, which
-> delegates to its **local default model (Qwen3-30B via Ollama on this box)** — so inference stays
-> on-box and I don't run my own model server. I also want Hermes to **deliver the staff alert to
-> Discord** — you already own that bot, so I won't rebuild it. Here's exactly what I need from you.
+> one `LeadAnalysis` JSON. Inference now goes directly to local Qwen3-30B via Ollama. I want
+> Hermes to **deliver the staff alert to Discord** and remain the gateway for actions/tools —
+> you already own that bot, so I won't rebuild it. Here's exactly what I need from you.
 > None of this requires you to touch scoring logic or the dashboard.
 
 ## 1. Enable a webhook `deliver_only` route  ← the ONE task (config, not code)
@@ -42,21 +41,13 @@ these lead alerts? If there's a dedicated #front-desk / #leads channel, give me 
 it's all localhost, no bind change needed. I'll use `**:8090`** (since `:8080` is already taken).
 - **Or:** I SSH-tunnel `:8642` (and `:11434`). Either works — just tell me which you prefer.
 
-## 4. Reasoning through Hermes → local Qwen3-30B  ← I need the gateway bearer
+## 4. Hermes gateway bearer
 
-- **The plan:** my backend POSTs the conversation to Hermes `/v1/chat/completions` and Hermes
-delegates to its **local default model, Qwen3-30B** (served via Ollama on this box, ~18 GB MoE
-/ ~3B active → fast, resident, coexists with the NIM voice stack). Scoring now goes **through
-Hermes → Qwen**, on-box — nothing leaves the building.
-- **What I need from you:**
-  1. Keep **Hermes running** with its **local Qwen3-30B default** (no cloud model).
-  2. Share the gateway bearer (**`API_SERVER_KEY`** from `~/.hermes/.env`) so my backend can
-     call `/v1/chat/completions`. I'll set `HERMES_API_KEY` from it.
-  3. Confirm the default model id, or what to pass — I'll leave `HERMES_INFERENCE_MODEL` blank
-     to take the Qwen3-30B default unless you tell me otherwise.
-- **Note:** Nemotron-120B (~82 GB) is an optional heavier/slower alternative; we are **not**
-asking you to pre-warm it. Qwen3-30B is the default reasoning path. If you ever swap the
-resident model, just tell me — I won't touch it.
+- **What I need from you:** share the gateway bearer (**`API_SERVER_KEY`** from
+  `~/.hermes/.env`) so my backend can call protected Hermes routes. I'll set `HERMES_API_KEY`
+  from it.
+- **Not needed for inference:** this repo calls local Qwen directly at
+  `http://127.0.0.1:11434/v1`.
 
 ## 5. Voice (ASR/TTS) + embeddings — how should I reach the NIM models?  ← need a decision
 
@@ -79,7 +70,7 @@ So "everything through Hermes" can't cover voice/embed as-is. **Which do you wan
   2. **You add proxy routes on Hermes** for embeddings/ASR/TTS so I have a single integration
      point. Cleaner, but it's real work on your side and Hermes isn't built for it today.
   3. **Leave voice/embed mock** for the demo (transcript stays a fixture, context-match stays
-     keyword-based) and only ship reasoning-via-Hermes.
+     keyword-based) and only ship local-Qwen reasoning plus Hermes alerts.
 
 Tell me 1/2/3 and (if 1) confirm the ASR container's port + API once it's running. Until you
 answer, I'm keeping voice/embed on the safe mock path.
@@ -93,9 +84,6 @@ rotate it, and don't attach that file to anything. Not mine to touch.
 
 ### What you do NOT need to do
 
-- ❌ Build any lead scoring, qualification, or dashboard logic — I own all of that. I send
-  Hermes the prompt; Hermes' local Qwen does the raw reasoning, I do everything around it.
-- ❌ Switch Hermes' default off the local Qwen3-30B to a cloud model — that would send patient
-  data off-box and break the on-prem pitch.
+- ❌ Build any lead scoring, qualification, or dashboard logic — I own all of that.
+- ❌ Change Hermes' default model for this repo — inference uses local Qwen directly.
 - ❌ Format the alert — I send you ready-to-post markdown; you just relay it.
-

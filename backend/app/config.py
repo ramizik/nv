@@ -36,16 +36,15 @@ CHAT_BACKEND = os.getenv("CHAT_BACKEND", "mock").lower()
 # bearer HERMES_API_KEY (= API_SERVER_KEY from ~/.hermes/.env). Cross-host access
 # requires co-location or an SSH tunnel because Hermes binds loopback.
 HERMES_BASE_URL = os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642")
-# Optional model override for Hermes chat/completions calls. Blank = Hermes default.
-# On this machine Hermes' stable default is Gemini; use INFERENCE_BACKEND=qwen for
-# guaranteed on-box Qwen reasoning.
-HERMES_INFERENCE_MODEL = os.getenv("HERMES_INFERENCE_MODEL", "")
+# Hermes chat/completions must stay on the local GB10 model. Do not leave this
+# blank, because Hermes may otherwise choose its own default route.
+HERMES_INFERENCE_MODEL = os.getenv("HERMES_INFERENCE_MODEL", os.getenv("QWEN_MODEL", "Qwen3-30B:latest"))
 HERMES_TIMEOUT_READ = float(os.getenv("HERMES_TIMEOUT_READ", "60"))
 
 # Direct local Qwen (INFERENCE_BACKEND=qwen). This is the primary GB10 model path.
 # Qwen3-30B (~18 GiB GGUF, MoE) coexists with the NIM embedding/TTS stack.
 QWEN_BASE_URL = os.getenv("QWEN_BASE_URL", os.getenv("NEMOTRON_BASE_URL", "http://127.0.0.1:11434/v1"))
-QWEN_MODEL = os.getenv("QWEN_MODEL", os.getenv("NEMOTRON_MODEL", "lifeos-qwen3-30b:latest"))
+QWEN_MODEL = os.getenv("QWEN_MODEL", os.getenv("NEMOTRON_MODEL", "Qwen3-30B:latest"))
 QWEN_API_KEY = os.getenv("QWEN_API_KEY", os.getenv("NEMOTRON_API_KEY", "not-needed"))
 QWEN_TIMEOUT_READ = float(os.getenv("QWEN_TIMEOUT_READ", os.getenv("NEMOTRON_TIMEOUT_READ", "240")))
 # Reasoning-off directive prepended to the system prompt. Qwen3 uses "/no_think"; for the
@@ -77,13 +76,23 @@ ASR_BACKEND = os.getenv("ASR_BACKEND", "nemotron-asr-streaming")
 ASR_BASE_URL = os.getenv("ASR_BASE_URL", "http://127.0.0.1:8002/v1")
 ASR_RUNTIME_STATUS = os.getenv(
     "ASR_RUNTIME_STATUS",
-    "blocked: nemotron-asr-streaming image is present, but runtime model-artifact download needs NGC_API_KEY",
+    "not ready: start ASR with inference/remote/start_asr.sh",
 )
 
 PARAKEET_BASE_URL = os.getenv("PARAKEET_BASE_URL", "")
 PARAKEET_RUNTIME_STATUS = os.getenv(
     "PARAKEET_RUNTIME_STATUS",
-    "blocked: parakeet-0.6b-tdt image on this host is linux/amd64 and cannot run on GB10 linux/arm64",
+    "dropped (intentional): redundant backup ASR. amd64-only image won't run on GB10 arm64; "
+    "ASR role covered by nemotron-asr-streaming (primary). NeMo-native is the only arm64 path if ever needed.",
 )
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+
+# LifeOS compatibility layer.
+LIFEOS_DATA_DIR = Path(os.getenv("LIFEOS_DATA_DIR", str(REPO_ROOT / "data")))
+LIFEOS_DB_PATH = Path(os.getenv("LIFEOS_DB_PATH", str(LIFEOS_DATA_DIR / "lifeos.db")))
+LIFEOS_AUDIO_DIR = Path(os.getenv("LIFEOS_AUDIO_DIR", str(LIFEOS_DATA_DIR / "audio")))
+LIFEOS_API_TOKEN = os.getenv("LIFEOS_API_TOKEN", HERMES_API_KEY)
+LIFEOS_ACK_EVERY_FRAMES = int(os.getenv("LIFEOS_ACK_EVERY_FRAMES", "25"))
+LIFEOS_ACTION_EXPIRY_TERMINAL_SECONDS = int(os.getenv("LIFEOS_ACTION_EXPIRY_TERMINAL_SECONDS", "300"))
+LIFEOS_ACTION_EXPIRY_STANDARD_SECONDS = int(os.getenv("LIFEOS_ACTION_EXPIRY_STANDARD_SECONDS", "1800"))

@@ -103,7 +103,7 @@ def collect_runtime_health() -> Dict[str, Any]:
             "probe": None if asr_ok else str(asr_payload),
         },
         "parakeet": {
-            "status": "blocked",
+            "status": "n/a",
             "detail": config.PARAKEET_RUNTIME_STATUS,
             "base_url": config.PARAKEET_BASE_URL,
         },

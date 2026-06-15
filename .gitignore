@@ -39,3 +39,5 @@ Thumbs.db
 .vscode/
 *.swp
 *~
+backend/.leads_store.json
+data/

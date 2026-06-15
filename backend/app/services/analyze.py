@@ -19,8 +19,34 @@ from app import config
 from app.adapters import get_chat_adapter, get_inference_adapter
 from app.services.clinic import get_clinic_context
 
-_STORE: Dict[str, Dict[str, Any]] = {}  # in-memory lead store (demo only)
+_STORE: Dict[str, Dict[str, Any]] = {}  # lead store
 _COUNTER = {"n": 0}
+# Persist to disk so analyzed leads survive a backend restart — this is what the Hermes
+# "brightsmile-leads" skill queries (GET /api/leads, /api/leads/summary) to answer staff
+# questions like "were there any hot leads after hours?".
+_LEADS_PATH = config.REPO_ROOT / "backend" / ".leads_store.json"
+
+
+def _load_store() -> None:
+    try:
+        data = json.loads(_LEADS_PATH.read_text(encoding="utf-8"))
+        _STORE.update(data.get("leads", {}))
+        _COUNTER["n"] = data.get("counter", len(_STORE))
+    except Exception:
+        pass  # no store yet / unreadable — start empty, never hard-fail
+
+
+def _save_store() -> None:
+    try:
+        _LEADS_PATH.write_text(
+            json.dumps({"leads": _STORE, "counter": _COUNTER["n"]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass  # persistence is best-effort; the demo must never break on disk I/O
+
+
+_load_store()
 
 
 def load_scenario(name: str) -> Dict[str, Any]:
@@ -89,7 +115,7 @@ def run_analysis(
     source = analysis.pop("_source", None)
     real_backends = ("hermes", "qwen", "nemotron")
     if config.INFERENCE_BACKEND in real_backends and source in ("hermes", "qwen"):
-        path = "GB10 Qwen via Hermes" if source == "hermes" else "GB10 Qwen (direct)"
+        path = "Hermes configured provider" if source == "hermes" else "GB10 Qwen (direct)"
         infer_status, infer_detail = "online", f"{path} @ {infer_ms}ms"
     elif config.INFERENCE_BACKEND in real_backends:
         infer_status, infer_detail = "degraded", f"GB10 unreachable — heuristic fallback @ {infer_ms}ms"
@@ -114,6 +140,7 @@ def run_analysis(
     ]
 
     _STORE[analysis["lead_id"]] = analysis
+    _save_store()
     return analysis
 
 
@@ -123,3 +150,37 @@ def get_lead(lead_id: str) -> Optional[Dict[str, Any]]:
 
 def list_leads() -> List[Dict[str, Any]]:
     return list(_STORE.values())
+
+
+def summarize_leads() -> Dict[str, Any]:
+    """Compact, query-friendly digest of all analyzed leads. This is the endpoint the
+    Hermes skill calls so the Discord bot can answer staff questions interactively."""
+    leads = list(_STORE.values())
+    order = {"hot": 0, "warm": 1, "cold": 2}
+
+    def _row(l: Dict[str, Any]) -> Dict[str, Any]:
+        sc, ex = l.get("score", {}), l.get("extracted", {})
+        nba, deal = l.get("next_best_action", {}), l.get("estimated_deal_value", {})
+        return {
+            "lead_id": l.get("lead_id"),
+            "name": l.get("lead", {}).get("name", "Unknown caller"),
+            "phone": l.get("lead", {}).get("phone", "n/a"),
+            "label": sc.get("label"),
+            "score": sc.get("value"),
+            "after_hours": l.get("after_hours"),
+            "received_at": l.get("received_at") or "n/a",
+            "service_interest": ex.get("service_interest"),
+            "timeline": ex.get("timeline"),
+            "estimated_value": f"${deal.get('low', 0):,}-${deal.get('high', 0):,}",
+            "recommended_action": nba.get("recommendation"),
+        }
+
+    rows = sorted((_row(l) for l in leads), key=lambda r: (order.get(r["label"], 9), -(r["score"] or 0)))
+    hot_ah = [r for r in rows if r["label"] == "hot" and r["after_hours"]]
+    return {
+        "total_leads": len(rows),
+        "counts": {k: sum(1 for r in rows if r["label"] == k) for k in ("hot", "warm", "cold")},
+        "hot_after_hours_count": len(hot_ah),
+        "hot_after_hours": hot_ah,
+        "leads": rows,
+    }

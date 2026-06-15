@@ -19,14 +19,11 @@
 - **Contract:** one canonical `LeadAnalysis` JSON object flows through everything
   (`shared/schemas/lead_analysis.schema.json`). Define once, render everywhere.
 - **Two swap-points, both default to `mock`** (zero-dep single-machine demo):
-  - `InferenceAdapter`: `mock` | `hermes` (REAL → route reasoning through Hermes → local
-    Qwen3-30B). Optional `qwen` (legacy alias `nemotron`) = DIRECT-to-Ollama (`:11434/v1`)
-    fallback, used ONLY if Hermes is down.
+  - `InferenceAdapter`: `mock` | `qwen` (REAL → direct local Qwen3-30B via Ollama). Optional
+    `hermes` = use Hermes' configured provider.
   - `ChatAdapter`: `mock` | `hermes` | `discord`
-- **Reasoning routes through Hermes, which delegates to its local default model — Qwen3-30B
-  (Ollama on the DGX).** Inference stays **on-box**; we don't run our own model server.
-  (Hermes' default is **local Qwen3-30B, NOT cloud Gemini** — routing through it is intended
-  and keeps patient data on-box.)
+- **Reasoning routes directly to local Qwen3-30B via Ollama.** Hermes remains the
+  agent/action/alert gateway. Do not assume Hermes' configured provider is local Qwen.
 
 ## Team: 2 teammates working concurrently
 - **You / this repo:** the **Lead Analyzer** — backend orchestrator + React dashboard.
@@ -41,33 +38,29 @@
   truth and avoid conflicting edits there.
 
 ## The remote server (Dell Pro Max "GB10" / DGX) — what this dev box must know
-- **Topology:** you develop here; the GB10 is a **separate remote Linux box** that runs Hermes
-  (which serves reasoning via its local model) + the NIM voice services. For the live demo, the
-  backend is best run **on the GB10** so it reaches Hermes (and its local Ollama) over localhost.
+- **Topology:** you develop here; the GB10 is a **separate remote Linux box** that runs Ollama
+  Qwen, Hermes, and the NIM sidecars. For the live demo, the backend is best run **on the GB10**
+  so it reaches all loopback services.
 - **Unified memory:** 128 GiB shared CPU+GPU (~121.6 GiB usable). **Only one large LLM fits
   resident at a time** — the 120B (~82 GB) evicts the lighter models and crowds the voice
   stack. `nvidia-smi` shows memory as "Not Supported" (unified); the box uses `free -h`.
-- **Real reasoning routes through Hermes on `:8642`** (OpenAI-compatible gateway), which
-  delegates to its local default model **Qwen3-30B** (served by Ollama on the box). We do NOT
-  stand up our own model server. To go real, set in `.env`:
+- **Real reasoning routes through Ollama on `:11434/v1`**. Hermes handles alerts/actions.
+  To go real, set in `.env`:
   ```
-  INFERENCE_BACKEND=hermes
+  INFERENCE_BACKEND=qwen
   CHAT_BACKEND=hermes
+  QWEN_BASE_URL=http://127.0.0.1:11434/v1
+  QWEN_MODEL=lifeos-qwen3-30b:latest
+  QWEN_THINKING_DIRECTIVE=/no_think
   HERMES_BASE_URL=http://127.0.0.1:8642             # localhost if backend runs on the GB10
-  HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>   # gateway bearer; model itself is keyless
+  HERMES_API_KEY=<API_SERVER_KEY from ~/.hermes/.env>   # gateway bearer for Hermes alerts/actions
   HERMES_DISCORD_CHANNEL=1509734278206984194
-  HERMES_INFERENCE_MODEL=                            # blank = Hermes default Qwen3-30B
   ```
-  - default **Qwen3-30B**: ~18 GB, MoE ~3B active → fast, resident, coexists with the voice
-    services → the demo path.
-  - optional heavier reasoning: set `HERMES_INFERENCE_MODEL=lifeos-nemotron-120b:latest`
-    (~82 GB, ~2× slower, monopolizes the box). The inference adapter falls back to mock on any
-    error, so latency/flakiness can't break the demo — but watch first-token latency on the 120B.
-  - direct-to-Ollama (`:11434/v1`) via the `qwen`/legacy `nemotron` adapter is a fallback ONLY
-    for when Hermes is down — not the normal path.
-- **Hermes binds `127.0.0.1:8642`** → the `INFERENCE_BACKEND=hermes` and `CHAT_BACKEND=hermes`
-  paths only work if the backend runs on the GB10 or you SSH-tunnel.
-- **Also on the box:** NIM TTS (:8003), NIM embeddings (:8001), NIM ASR (being pulled).
+  - normal **Qwen3-30B**: ~18 GB, MoE ~3B active, resident, coexists with embedding/TTS.
+  - Nemotron-120B is a deep-planning profile, not this app's hot path.
+- **Hermes binds `127.0.0.1:8642`** → `CHAT_BACKEND=hermes` works when the backend runs on
+  the GB10 or you SSH-tunnel.
+- **Also on the box:** NIM TTS (:8003), NIM embeddings (:8001), NIM ASR blocked pending NGC key.
 - **Shared, multi-agent box:** teammates are live. Loading/unloading models and restarting
   containers affects others — coordinate, don't clobber.
 

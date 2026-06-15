@@ -10,8 +10,8 @@ all on-prem on the GB10.*
 - For the live wow: `CHAT_BACKEND=discord` + `DISCORD_WEBHOOK_URL` set, Discord channel
   visible on a second screen. (If anything is flaky: keep all-mock — the dashboard shows
   the alert preview anyway.)
-- Optional credibility: `INFERENCE_BACKEND=hermes` (reasoning via Hermes → local Qwen3-30B)
-  so System Health shows "GB10 @ Xms".
+- Optional credibility: `INFERENCE_BACKEND=qwen` and `CHAT_BACKEND=hermes` so System Health
+  shows local Qwen plus Hermes handoff.
 
 ## Run of show
 
@@ -38,9 +38,9 @@ all on-prem on the GB10.*
 > "Staff get a structured alert and a ready-to-send message within seconds."
 
 **2:15 — Proof it's local (20s)**
-- **System Health:** Qwen via Hermes — GB10 @ ~140ms · Discord online · all on-prem.
-> "Voice, reasoning (Qwen via Hermes), and the Discord alert all run locally on the Dell
-> Pro Max GB10 — nothing leaves the building."
+- **System Health:** Qwen direct — GB10 · Hermes online · embedding/TTS online.
+> "Reasoning runs on local Qwen, Hermes handles the alert/action handoff, and the NIM
+> sidecars are ready on the Dell Pro Max GB10."
 
 **2:35 — Close on ROI (25s)**
 > "One recovered veneer case pays for the hardware many times over. This is an always-on
